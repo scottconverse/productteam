@@ -1,0 +1,35 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+secrets/
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Node
+node_modules/
+
+# ProductTeam runtime artifacts
+.productteam/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

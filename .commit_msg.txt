@@ -1,0 +1,9 @@
+Initial release: ProductTeam - AI product development pipeline
+
+8 specialized agent skills: PRD Writer, Planner, Builder, UI Builder,
+Evaluator, Design Evaluator, Doc Writer, Orchestrator.
+
+GAN-inspired generator-evaluator loop: the Builder never declares done,
+only the Evaluator can. Proven on 6 packages with 755 tests.
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>

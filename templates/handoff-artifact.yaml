@@ -1,0 +1,37 @@
+# Handoff Artifact Template
+# Used to pass structured context between pipeline stages.
+#
+# The handoff artifact captures what was built, what was decided,
+# and what the next agent needs to know.
+
+sprint:                        # Sprint number
+stage: ""                      # planner | builder | evaluator
+timestamp: ""                  # YYYY-MM-DD HH:MM
+status: ""                     # Status at handoff time
+
+from_agent: ""                 # Which agent produced this artifact
+to_agent: ""                   # Which agent receives it
+
+deliverables_summary:
+  # Quick reference of what was planned/built/evaluated.
+  #
+  # - file: "path/to/file.py"
+  #   status: planned | implemented | passed | failed
+  #   notes: "any relevant detail"
+
+decisions:
+  # Key decisions made during this stage.
+  #
+  # - decision: "what was decided"
+  #   rationale: "why"
+
+blockers:
+  # Anything preventing progress.
+  #
+  # - blocker: "description of the issue"
+  #   impact: "what it blocks"
+  #   suggested_resolution: "how to fix it"
+
+context_for_next_agent: |
+  # Free-form notes the next agent in the pipeline needs.
+  # Architectural context, warnings, things to watch out for.
