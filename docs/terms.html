@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProductTeam — Terms of Service &amp; Legal</title>
+  <style>
+    :root {
+      --bg: #0e1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-body);
+      color: var(--text);
+      line-height: 1.7;
+      background: var(--bg);
+    }
+    .container { max-width: 800px; margin: 0 auto; padding: 40px 24px 80px; }
+    h1 { font-size: 2rem; margin-bottom: 8px; color: #fff; }
+    h2 { font-size: 1.4rem; margin-top: 40px; margin-bottom: 12px; color: var(--accent); }
+    h3 { font-size: 1.1rem; margin-top: 24px; margin-bottom: 8px; color: #fff; }
+    p, li { color: var(--text-muted); margin-bottom: 12px; }
+    ul { padding-left: 24px; }
+    li { margin-bottom: 8px; }
+    .meta { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; }
+    .back { display: inline-block; margin-bottom: 24px; color: var(--accent); text-decoration: none; font-size: 14px; }
+    .back:hover { text-decoration: underline; }
+    .callout {
+      background: var(--surface);
+      border-left: 4px solid var(--accent);
+      padding: 16px 20px;
+      border-radius: 0 8px 8px 0;
+      margin: 20px 0;
+    }
+    .callout p { margin-bottom: 0; }
+    strong { color: var(--text); }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="index.html" class="back">&larr; Back to ProductTeam</a>
+    <h1>Terms of Service &amp; Legal Disclaimer</h1>
+    <p class="meta">ProductTeam &mdash; Last updated March 2026</p>
+
+    <h2>1. Acceptance of Terms</h2>
+    <p>By downloading, installing, or using ProductTeam ("the Software"), including any of its agent skills (prd-writer, planner, builder, ui-builder, evaluator, evaluator-design, doc-writer, orchestrator), you agree to these Terms of Service. If you do not agree, do not use the Software.</p>
+
+    <h2>2. What ProductTeam Is</h2>
+    <p>ProductTeam is a set of AI agent skills for product development. Each skill is a SKILL.md file that defines an agent's role, process, and rules. The skills are designed for use with Claude Code in the Claude desktop app.</p>
+    <ul>
+      <li><strong>PRD Writer</strong> &mdash; Takes a product concept, asks clarifying questions, researches competitors, and produces a structured PRD.</li>
+      <li><strong>Planner</strong> &mdash; Reads a PRD and decomposes it into sprint contracts with testable acceptance criteria.</li>
+      <li><strong>Builder</strong> &mdash; Implements sprint contracts with production-quality code and tests.</li>
+      <li><strong>UI Builder</strong> &mdash; Specialized builder for visual work: landing pages, dashboards, web UIs.</li>
+      <li><strong>Evaluator</strong> &mdash; Verifies code against sprint contracts, runs tests, tries to break things, and grades PASS/NEEDS_WORK/FAIL.</li>
+      <li><strong>Design Evaluator</strong> &mdash; Grades visual artifacts on Coherence, Originality, Craft, and Functionality.</li>
+      <li><strong>Doc Writer</strong> &mdash; Reads code and produces README, landing page, PDF, changelog, and terms of service.</li>
+      <li><strong>Orchestrator</strong> &mdash; Routes work between agents, manages build-evaluate loops, and enforces approval gates.</li>
+    </ul>
+    <p>ProductTeam is not a standalone tool. It requires Claude Code as the runtime environment. The skills produce suggestions, code, and documentation that require human review before use.</p>
+
+    <h2>3. License</h2>
+    <p>ProductTeam is released under the <strong>MIT License</strong>.</p>
+    <div class="callout">
+      <p>THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+    </div>
+
+    <h2>4. No Warranty</h2>
+    <p>ProductTeam is provided without any warranty. The authors make no guarantees that:</p>
+    <ul>
+      <li>AI-generated code produced by the Builder or UI Builder is correct, secure, or production-ready</li>
+      <li>PRDs, sprint contracts, or plans produced by the agents are complete or accurate</li>
+      <li>The Evaluator will catch all bugs, security vulnerabilities, or quality issues</li>
+      <li>The Design Evaluator's ratings reflect objective quality standards</li>
+      <li>Documentation produced by the Doc Writer is accurate or complete</li>
+      <li>The build-evaluate loop will converge on correct implementations</li>
+      <li>Skills will function correctly with all versions of Claude Code or all Claude models</li>
+    </ul>
+
+    <h2>5. AI-Generated Output Risks</h2>
+
+    <h3>5.1 Code Requires Human Review</h3>
+    <p>All code produced by ProductTeam skills is AI-generated and requires human review before use in any environment. AI-generated code may contain bugs, security vulnerabilities, incorrect logic, or subtle errors that automated evaluation cannot detect. Never deploy AI-generated code without thorough human review.</p>
+
+    <h3>5.2 ProductTeam Skills Produce Suggestions, Not Guaranteed-Correct Implementations</h3>
+    <p>The output of every skill &mdash; PRDs, plans, code, evaluations, documentation &mdash; is a suggestion. These outputs reflect the AI's best effort given the input, but they are not guaranteed to be correct, complete, or fit for any particular purpose.</p>
+
+    <h3>5.3 The Evaluator Improves Quality but Does Not Guarantee It</h3>
+    <p>The build-evaluate loop is designed to catch bugs and quality issues that the Builder misses. However, the Evaluator is also an AI agent and has the same fundamental limitations. A PASS grade from the Evaluator does not mean code is free of defects. It means the Evaluator's automated checks and heuristic analysis did not find issues &mdash; not that none exist.</p>
+
+    <h3>5.4 Users Are Responsible for All Output</h3>
+    <p>You are responsible for reviewing all code, tests, documentation, and artifacts produced by ProductTeam skills. By using the output of these skills, you accept full responsibility for the consequences of that use, including in production environments, public-facing applications, and security-sensitive contexts.</p>
+
+    <h2>6. Limitation of Liability</h2>
+    <p>To the maximum extent permitted by applicable law, the authors and contributors shall not be liable for any:</p>
+    <ul>
+      <li>Direct, indirect, incidental, special, consequential, or punitive damages</li>
+      <li>Security breaches or vulnerabilities in AI-generated code</li>
+      <li>Data loss resulting from use of AI-generated code or scripts</li>
+      <li>Business losses arising from reliance on AI-generated plans, estimates, or documentation</li>
+      <li>Costs or damages arising from deploying AI-generated code without human review</li>
+      <li>Issues caused by incompatibilities between skills and specific Claude Code versions or models</li>
+    </ul>
+    <p>This limitation applies regardless of the theory of liability.</p>
+
+    <h2>7. Indemnification</h2>
+    <p>You agree to indemnify, defend, and hold harmless the authors and contributors from any claims, damages, losses, liabilities, costs, and expenses (including reasonable attorney fees) arising from your use of the Software or any output it produces.</p>
+
+    <h2>8. No Professional Advice</h2>
+    <p>ProductTeam does not provide software engineering consulting, security auditing, code review, or professional advice of any kind. These are AI agent skills that produce automated output based on pattern matching and language model inference. For security-critical applications, consult qualified security professionals. For production deployments, follow your organization's code review and deployment processes.</p>
+
+    <h2>9. Age Requirement</h2>
+    <p>ProductTeam is intended for users aged 18 and older.</p>
+
+    <h2>10. Governing Law</h2>
+    <p>These terms are governed by the laws of the State of Colorado, United States, without regard to conflict of law principles. Any disputes shall be resolved in the courts of Colorado.</p>
+
+    <h2>11. Contact</h2>
+    <ul>
+      <li>GitHub Issues: <a href="https://github.com/scottconverse/productteam/issues">github.com/scottconverse/productteam/issues</a></li>
+    </ul>
+
+    <p style="margin-top:48px;color:#484f58;font-size:13px;">&copy; 2026 Scott Converse. ProductTeam is released under the MIT License.</p>
+  </div>
+</body>
+</html>

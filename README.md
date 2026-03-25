@@ -4,6 +4,14 @@
 
 Turn a product concept into shipping code. PRD → Plan → Build → Evaluate → Document → Ship.
 
+## Built For Claude Code
+
+- **ProductTeam is a set of Claude Code skills** — SKILL.md files that Claude Code reads and follows as agent instructions
+- **Designed for Claude Code** in the Claude desktop app
+- **Works best with Claude Opus or Sonnet models** — these models handle the multi-step reasoning and code generation the pipeline requires
+- **Not a standalone tool** — requires Claude Code as the runtime. ProductTeam provides the agent skills; Claude Code provides the execution environment
+- Each skill is a markdown file that defines an agent's role, process, and rules. Claude Code reads the skill and acts accordingly.
+
 ## The Idea
 
 Every modern software team has specialized roles: product managers write specs, engineers build, QA tests, designers review, technical writers document. ProductTeam encodes these roles as AI agent skills with a key insight from Anthropic's research: **separate the builder from the judge.**
@@ -145,13 +153,17 @@ Built and tested on the prompttools project (7 Python packages):
 
 ## Installation
 
-Copy the `skills/` directory into your project:
+### In Claude Code (recommended)
+
+Copy the `skills/` directory into your project's `.claude/skills/` directory:
 
 ```bash
 cp -r productteam/skills/ your-project/.claude/skills/
 ```
 
-Or clone and symlink:
+### In Claude Desktop App
+
+Clone the repo and point Claude Code at the skills directory:
 
 ```bash
 git clone https://github.com/scottconverse/productteam.git

@@ -1,9 +1,7 @@
-Initial release: ProductTeam - AI product development pipeline
+Add Claude Code context, terms of service, update doc-writer
 
-8 specialized agent skills: PRD Writer, Planner, Builder, UI Builder,
-Evaluator, Design Evaluator, Doc Writer, Orchestrator.
-
-GAN-inspired generator-evaluator loop: the Builder never declares done,
-only the Evaluator can. Proven on 6 packages with 755 tests.
+README and landing page now specify ProductTeam is built for Claude Code.
+Added terms of service page with AI-specific disclaimers.
+Doc Writer skill now produces terms.html as a standard deliverable.
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>

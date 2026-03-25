@@ -14,7 +14,7 @@ You are the Doc Writer agent. Your job is to read the actual source code and pro
 3. **README-full.txt** — Plain text version (no markdown), properly reformatted for plain text readability
 4. **Landing page** — Static HTML at `docs/index.html`, dark theme, responsive, zero dependencies
 5. **PDF documentation** — Generated from README-full.md
-6. **Terms of service** — If applicable (`docs/terms.html`)
+6. **Terms of service** — Every project should have one (`docs/terms.html`)
 7. **CHANGELOG.md** — Version history
 
 ---
@@ -162,10 +162,40 @@ Write all files to the correct locations:
 - `README-full.md` — Project root
 - `README-full.txt` — Project root
 - `docs/index.html` — Landing page
-- `docs/terms.html` — Terms of service (if applicable)
+- `docs/terms.html` — Terms of service (always produce this)
 - `CHANGELOG.md` — Project root
 
 Report what was created and any discrepancies found between PRD and actual code.
+
+#### Terms of Service (`docs/terms.html`)
+
+Every project should include a terms of service page. This is a standard deliverable, not optional. Use the following structure:
+
+```
+1. Acceptance of Terms — What constitutes agreement
+2. What [Product] Is — Brief description of the product and its components
+3. License — MIT License with the standard warranty disclaimer callout
+4. No Warranty — Bullet list of specific things NOT guaranteed (tailor to the product)
+5. Product-Specific Risks — Subsections for each major risk area:
+   - AI-generated code requires human review
+   - Output is suggestions, not guaranteed-correct implementations
+   - Automated evaluation improves quality but does not guarantee it
+   - Users are responsible for reviewing all output
+6. Limitation of Liability — Standard limitation clause
+7. Indemnification — Standard indemnification clause
+8. No Professional Advice — Clarify the tool does not provide professional advice
+9. Age Requirement — 18+
+10. Governing Law — State of Colorado
+11. Contact — GitHub Issues link
+```
+
+Style rules for terms.html:
+- Match the project's landing page theme (dark theme if landing page is dark)
+- Use the same CSS variables and font stack as `docs/index.html`
+- Include a back-link to the landing page
+- Include a meta line with product name and last-updated date
+- Use callout boxes for the MIT warranty disclaimer
+- Link to the terms page from the landing page footer
 
 ---
 
