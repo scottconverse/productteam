@@ -266,6 +266,30 @@ When the user asks for status, read all files in `.productteam/` and report:
 10. **Design Review is mandatory.** Every release sprint must pass Step 5.5 (Design Review) before reaching Ship Gate. There are no exceptions.
 11. **Version bump before Ship Gate.** Before shipping, verify the version has been incremented in all relevant files (__init__.py, pyproject.toml, README, landing page). Every release that changes functionality must bump the version. Follow semver: patch for fixes, minor for features, major for breaking changes.
 
+## Pre-Ship Checklist
+
+Before EVERY commit and before Ship Gate, the Orchestrator must read and verify each item. This is not optional. Do not skip items. Do not assume.
+
+```
+[ ] All tests passing — run the full suite, not just the sprint tests
+[ ] Version bumped in __init__.py
+[ ] Version bumped in pyproject.toml
+[ ] Version bumped in README.md
+[ ] Version bumped in landing page (docs/index.html)
+[ ] Design Evaluator ran on all visual artifacts (landing page, terms, README)
+[ ] Design Evaluator verdict is PASS or APPROVED_WITH_NOTES
+[ ] No API keys, secrets, or credentials in staged files (grep for AIza, sk-, gsk_, ghp_, xoxb-, sk-ant-)
+[ ] README test count matches actual test count
+[ ] README feature list matches actual code features
+[ ] Landing page feature list matches actual code features
+[ ] All Evaluator findings resolved (no open NEEDS_WORK verdicts)
+[ ] CHANGELOG or commit message describes what changed
+[ ] No placeholder URLs remain (yourusername, example.com)
+[ ] Max 3 parallel agents were used (not more)
+```
+
+If any item fails, fix it before proceeding. Do not ship with unchecked items.
+
 ## Credential Usage
 
 Sub-agents may need to make authenticated API calls (e.g., creating GitHub repos, publishing npm/PyPI packages, pushing code). The following rules apply:
