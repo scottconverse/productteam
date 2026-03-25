@@ -211,6 +211,175 @@ def config_show(ctx: typer.Context) -> None:
         console.print(table)
 
 
+# ---------------------------------------------------------------------------
+# productteam run
+# ---------------------------------------------------------------------------
+
+PIPELINE_STEPS = [
+    {
+        "number": 1,
+        "title": "PRD Writer",
+        "instructions": [
+            'Tell Claude: "Read the PRD Writer skill at .claude/skills/prd-writer/SKILL.md and write a PRD for: [your concept]"',
+        ],
+        "gate": "Review and approve the PRD before continuing.",
+    },
+    {
+        "number": 2,
+        "title": "Planner",
+        "instructions": [
+            'Tell Claude: "Read the Planner skill at .claude/skills/planner/SKILL.md and create sprint contracts from the PRD at docs/PRD.md"',
+        ],
+        "gate": "Review and approve the sprint plan before continuing.",
+    },
+    {
+        "number": 3,
+        "title": "Builder + Evaluator Loop",
+        "instructions": [
+            'Tell Claude: "Read the Builder skill at .claude/skills/builder/SKILL.md and implement sprint-001.yaml"',
+            'Then: "Read the Evaluator skill at .claude/skills/evaluator/SKILL.md and evaluate sprint 001"',
+            "Loop until PASS (max 3 loops).",
+            "Repeat for each sprint.",
+        ],
+        "gate": None,
+    },
+    {
+        "number": 4,
+        "title": "Doc Writer",
+        "instructions": [
+            'Tell Claude: "Read the Doc Writer skill at .claude/skills/doc-writer/SKILL.md and write documentation"',
+        ],
+        "gate": None,
+    },
+    {
+        "number": 5,
+        "title": "Design Review",
+        "instructions": [
+            'Tell Claude: "Read the Design Evaluator skill at .claude/skills/evaluator-design/SKILL.md and evaluate all visual artifacts"',
+        ],
+        "gate": None,
+    },
+    {
+        "number": 6,
+        "title": "Ship",
+        "instructions": [
+            "Run the pre-ship checklist. Commit and push.",
+        ],
+        "gate": None,
+    },
+]
+
+
+def _print_step(step: dict) -> None:
+    """Print a single pipeline step to the console."""
+    console.print(f"\n[bold cyan]Step {step['number']}: {step['title']}[/bold cyan]")
+    for line in step["instructions"]:
+        console.print(f"  {line}")
+    if step["gate"]:
+        console.print(f"  [yellow]Gate:[/yellow] {step['gate']}")
+
+
+@app.command("run")
+def run_cmd(
+    directory: Optional[Path] = typer.Argument(
+        None, help="Project directory (default: current directory)"
+    ),
+    step: Optional[int] = typer.Option(
+        None, "--step", "-s", help="Print instructions for a single step (1-6)"
+    ),
+) -> None:
+    """Print the ProductTeam pipeline steps to follow in Claude Code."""
+    from productteam.config import find_config, load_config
+    from productteam.scaffold import read_project_state
+
+    target = (directory or Path.cwd()).resolve()
+
+    # 1. Check .productteam/ exists
+    pt_dir = target / ".productteam"
+    if not pt_dir.exists():
+        error_console.print(
+            "[red]Error:[/red] .productteam/ not found. "
+            "Run [bold]'productteam init'[/bold] first."
+        )
+        raise typer.Exit(code=1)
+
+    # 2. Check productteam.toml exists and is valid
+    config_path = target / "productteam.toml"
+    if not config_path.exists():
+        error_console.print(
+            "[red]Error:[/red] productteam.toml not found. "
+            "Run [bold]'productteam init'[/bold] to create one."
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        load_config(config_path)
+    except Exception as exc:
+        error_console.print(f"[red]Error:[/red] productteam.toml is invalid: {exc}")
+        raise typer.Exit(code=1)
+
+    # --step N: print just one step
+    if step is not None:
+        matching = [s for s in PIPELINE_STEPS if s["number"] == step]
+        if not matching:
+            error_console.print(
+                f"[red]Error:[/red] Invalid step number {step}. Choose 1-{len(PIPELINE_STEPS)}."
+            )
+            raise typer.Exit(code=1)
+        _print_step(matching[0])
+        return
+
+    # 3. Print full pipeline header
+    console.print("\n[bold]ProductTeam Pipeline[/bold]")
+    console.print("=" * 22)
+
+    for s in PIPELINE_STEPS:
+        _print_step(s)
+
+    # 4. Show current pipeline status if state exists
+    state = read_project_state(target)
+    sprints = state["sprints"]
+    evaluations = state["evaluations"]
+
+    if sprints or evaluations:
+        console.print("\n[bold]Current Pipeline Status[/bold]")
+        console.print("-" * 26)
+
+        if sprints:
+            sprint_status_styles = {
+                "planned": "blue",
+                "building": "yellow",
+                "evaluating": "cyan",
+                "passed": "green",
+                "needs_work": "red",
+                "unknown": "dim",
+            }
+            sprint_table = Table(title="Sprints", box=box.ROUNDED)
+            sprint_table.add_column("Sprint", style="bold")
+            sprint_table.add_column("Status")
+            for sprint in sprints:
+                s = sprint["status"]
+                style = sprint_status_styles.get(s, "white")
+                sprint_table.add_row(sprint["name"], f"[{style}]{s}[/{style}]")
+            console.print(sprint_table)
+
+        if evaluations:
+            verdict_styles = {
+                "passed": "green",
+                "needs_work": "red",
+                "pending": "yellow",
+                "unknown": "dim",
+            }
+            eval_table = Table(title="Evaluations", box=box.ROUNDED)
+            eval_table.add_column("Evaluation", style="bold")
+            eval_table.add_column("Verdict")
+            for ev in evaluations:
+                v = ev["verdict"]
+                style = verdict_styles.get(v, "white")
+                eval_table.add_row(ev["name"], f"[{style}]{v}[/{style}]")
+            console.print(eval_table)
+
+
 @config_app.command("set")
 def config_set(
     key: str = typer.Argument(..., help="Dot-separated key, e.g. 'pipeline.model'"),

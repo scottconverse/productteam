@@ -265,6 +265,8 @@ When the user asks for status, read all files in `.productteam/` and report:
 9. **The Orchestrator never writes code, docs, or evaluations.** You only route, track, and report. You are the conductor, not the musician.
 10. **Design Review is mandatory.** Every release sprint must pass Step 5.5 (Design Review) before reaching Ship Gate. There are no exceptions.
 11. **Version bump before Ship Gate.** Before shipping, verify the version has been incremented in all relevant files (__init__.py, pyproject.toml, README, landing page). Every release that changes functionality must bump the version. Follow semver: patch for fixes, minor for features, major for breaking changes.
+12. **Never launch a duplicate agent.** If an agent is slow, check its output file before killing. If the output file is empty and the agent has been running for more than 15 minutes, kill it first, confirm it is dead, then relaunch. Never run two agents on the same sprint or the same files simultaneously.
+13. **Maximum 3 parallel agents.** Do not run more than 3 agents at the same time. Speed is not worth the oversight loss. 3 is the limit.
 
 ## Pre-Ship Checklist
 
