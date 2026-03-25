@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "productteam"
+version = "0.1.0"
+description = "AI-powered product development pipeline using Claude skills"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "typer[all]>=0.12.0",
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0.0",
+    "tomli-w>=1.0.0",
+]
+
+[project.scripts]
+productteam = "productteam.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/productteam"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"skills" = "productteam/skills"
+"templates" = "productteam/templates"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -128,9 +128,26 @@ Track the loop count. Include it in every evaluation report and handoff artifact
 After all Evaluators return PASS for a sprint:
 
 1. Invoke the Doc Writer skill. The Doc Writer produces README updates, landing pages, PDFs, and changelogs as appropriate.
-2. **Do not pause** — automatically route Doc Writer output to the Design Evaluator.
-3. If the Design Evaluator returns **PASS**: documentation is complete.
-4. If the Design Evaluator returns **NEEDS_WORK**: route back to Doc Writer (or UI Builder if the issue is visual). Apply the same 3-loop maximum.
+2. **Do not pause** — automatically proceed to Phase 5.5.
+
+### Step 5.5: Design Review (Mandatory Gate)
+
+This step is NOT optional. Every release sprint must pass Design Review before proceeding to Ship Gate.
+
+After Doc Writer completes, ALWAYS launch the Design Evaluator on:
+- `docs/index.html` (landing page)
+- `docs/terms.html` (terms page)
+- `README.md` formatting
+
+Grade against these four dimensions:
+- **Coherence** — does the content make sense and tell a clear story?
+- **Originality** — does it have a distinct voice, or is it generic filler?
+- **Craft** — is the writing and visual presentation polished?
+- **Functionality** — do links, layouts, and interactive elements work as intended?
+
+Routing:
+- If the Design Evaluator returns **NEEDS_WORK**: route back to Doc Writer (or UI Builder if the issue is visual). Apply the same 3-loop maximum.
+- If the Design Evaluator returns **PASS**: documentation and design are complete. Proceed to Ship Gate.
 
 ### Step 6: Ship Gate
 
@@ -246,3 +263,21 @@ When the user asks for status, read all files in `.productteam/` and report:
 7. **Doc Writer runs AFTER code passes.** Never document code that might change in the next evaluation loop.
 8. **Write handoff artifacts every time.** Even on failure. Even on escalation. The next session needs to know what happened.
 9. **The Orchestrator never writes code, docs, or evaluations.** You only route, track, and report. You are the conductor, not the musician.
+10. **Design Review is mandatory.** Every release sprint must pass Step 5.5 (Design Review) before reaching Ship Gate. There are no exceptions.
+
+## Credential Usage
+
+Sub-agents may need to make authenticated API calls (e.g., creating GitHub repos, publishing npm/PyPI packages, pushing code). The following rules apply:
+
+| Action | Rule |
+|--------|------|
+| Storing credentials in files, commits, or code | NEVER allowed — no exceptions |
+| Using credentials provided by the user for API operations | ALLOWED |
+| Writing credentials to disk in any form | NEVER allowed |
+| Passing credentials via environment variables or inline commands | ALLOWED — preferred method |
+
+When a sub-agent needs to make an authenticated call:
+- Pass credentials to the sub-agent via its prompt or as an environment variable in the invocation command.
+- The sub-agent uses the credential in memory only for the duration of the call.
+- The sub-agent never writes the credential to any file, log, or artifact.
+- The Orchestrator never logs or echoes credentials in handoff artifacts or status reports.

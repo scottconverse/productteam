@@ -143,6 +143,18 @@ command2 [args] [options]    # description
 - [Coverage target]
 - [Edge cases to cover]
 
+## Version Roadmap
+
+| Version | Phase | What Ships |
+|---------|-------|------------|
+| 0.1.0   | MVP   | [core features — minimum viable, usable product] |
+| 0.2.0   | Phase 2 | [expanded features — what gets added after initial feedback] |
+| 1.0.0   | Full Release | [complete vision — everything in the goals section] |
+
+- `0.x.x` = pre-release; API and interfaces may change between versions
+- `1.0.0` = full product vision realized; API is stable
+- Each row must describe what concretely ships in that version, not just a label
+
 ## Success Criteria
 - [How do we know this product works?]
 - [Measurable outcomes]
