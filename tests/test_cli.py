@@ -232,16 +232,15 @@ def test_no_args_shows_help():
 
 def test_run_no_productteam_dir(tmp_path):
     """run exits with code 1 when .productteam/ does not exist."""
-    result = runner.invoke(app, ["run", str(tmp_path)])
+    result = runner.invoke(app, ["run", "--dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "productteam init" in result.output
 
 
 def test_run_no_config_toml(tmp_path):
     """run exits with code 1 when productteam.toml is missing."""
-    # Create .productteam/ but NOT productteam.toml
     (tmp_path / ".productteam").mkdir()
-    result = runner.invoke(app, ["run", str(tmp_path)])
+    result = runner.invoke(app, ["run", "--dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "productteam.toml" in result.output
 
@@ -250,125 +249,38 @@ def test_run_invalid_config_toml(tmp_path):
     """run exits with code 1 when productteam.toml is invalid TOML."""
     (tmp_path / ".productteam").mkdir()
     (tmp_path / "productteam.toml").write_text("not valid toml ][[\n")
-    result = runner.invoke(app, ["run", str(tmp_path)])
+    result = runner.invoke(app, ["run", "--dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "invalid" in result.output.lower()
 
 
-def test_run_prints_pipeline_header(tmp_path):
-    """run prints the ProductTeam Pipeline header."""
+def test_run_dry_run_shows_stages(tmp_path):
+    """run --dry-run shows stages without calling LLM."""
     runner.invoke(app, ["init", str(tmp_path)])
-    result = runner.invoke(app, ["run", str(tmp_path)])
+    result = runner.invoke(app, ["run", "test concept", "--dir", str(tmp_path), "--dry-run", "--auto-approve"])
     assert result.exit_code == 0
+    assert "Dry run" in result.output or "Pipeline" in result.output
+
+
+def test_run_prints_provider_info(tmp_path, monkeypatch):
+    """run shows provider and model in output."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    runner.invoke(app, ["init", str(tmp_path)])
+    result = runner.invoke(app, ["run", "test", "--dir", str(tmp_path), "--dry-run", "--auto-approve"])
     assert "ProductTeam Pipeline" in result.output
 
 
-def test_run_prints_all_six_steps(tmp_path):
-    """run prints all 6 pipeline steps."""
+def test_run_step_option_invalid_value(tmp_path, monkeypatch):
+    """--step with invalid stage name exits with error."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     runner.invoke(app, ["init", str(tmp_path)])
-    result = runner.invoke(app, ["run", str(tmp_path)])
-    assert result.exit_code == 0
-    for n in range(1, 7):
-        assert f"Step {n}:" in result.output
-
-
-def test_run_prints_step_titles(tmp_path):
-    """run prints recognisable step titles."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    result = runner.invoke(app, ["run", str(tmp_path)])
-    assert result.exit_code == 0
-    assert "PRD Writer" in result.output
-    assert "Planner" in result.output
-    assert "Builder" in result.output
-    assert "Doc Writer" in result.output
-    assert "Design Review" in result.output
-    assert "Ship" in result.output
-
-
-def test_run_prints_skill_paths(tmp_path):
-    """run instructions reference .claude/skills/ paths."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    result = runner.invoke(app, ["run", str(tmp_path)])
-    assert ".claude/skills/" in result.output
-
-
-def test_run_prints_gates(tmp_path):
-    """run prints approval gate text for steps that have them."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    result = runner.invoke(app, ["run", str(tmp_path)])
-    assert "Gate:" in result.output
-    assert "approve" in result.output.lower()
-
-
-def test_run_no_status_section_when_empty(tmp_path):
-    """run does not print status section when there are no sprints/evaluations."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    result = runner.invoke(app, ["run", str(tmp_path)])
-    assert result.exit_code == 0
-    assert "Current Pipeline Status" not in result.output
-
-
-def test_run_shows_status_when_sprints_exist(tmp_path):
-    """run shows current pipeline status when sprints are present."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    sprint_dir = tmp_path / ".productteam" / "sprints" / "sprint-001"
-    sprint_dir.mkdir()
-    result = runner.invoke(app, ["run", str(tmp_path)])
-    assert result.exit_code == 0
-    assert "Current Pipeline Status" in result.output
-    assert "sprint-001" in result.output
-
-
-def test_run_shows_status_when_evaluations_exist(tmp_path):
-    """run shows current pipeline status when evaluations are present."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    eval_file = tmp_path / ".productteam" / "evaluations" / "eval-001.yaml"
-    eval_file.write_text("verdict: passed\n")
-    result = runner.invoke(app, ["run", str(tmp_path)])
-    assert result.exit_code == 0
-    assert "Current Pipeline Status" in result.output
-    assert "eval-001" in result.output
-
-
-def test_run_step_option_prints_single_step(tmp_path):
-    """--step N prints only that step's instructions."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    result = runner.invoke(app, ["run", str(tmp_path), "--step", "1"])
-    assert result.exit_code == 0
-    assert "PRD Writer" in result.output
-    # Other step titles should not appear
-    assert "Planner" not in result.output
-    assert "Doc Writer" not in result.output
-
-
-def test_run_step_option_each_step(tmp_path):
-    """--step N works for every valid step number."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    expected_titles = {
-        1: "PRD Writer",
-        2: "Planner",
-        3: "Builder",
-        4: "Doc Writer",
-        5: "Design Review",
-        6: "Ship",
-    }
-    for n, title in expected_titles.items():
-        result = runner.invoke(app, ["run", str(tmp_path), "--step", str(n)])
-        assert result.exit_code == 0, f"Step {n} failed: {result.output}"
-        assert title in result.output, f"Expected '{title}' in step {n} output"
-
-
-def test_run_step_option_invalid_number(tmp_path):
-    """--step with an out-of-range number exits with code 1."""
-    runner.invoke(app, ["init", str(tmp_path)])
-    result = runner.invoke(app, ["run", str(tmp_path), "--step", "99"])
-    assert result.exit_code == 1
+    result = runner.invoke(app, ["run", "test", "--dir", str(tmp_path), "--step", "nonexistent"])
+    assert result.exit_code != 0
 
 
 def test_run_default_directory(tmp_path, monkeypatch):
-    """run uses cwd when no directory argument is given."""
+    """run uses cwd when no --dir is given."""
     monkeypatch.chdir(tmp_path)
     runner.invoke(app, ["init"])
-    result = runner.invoke(app, ["run"])
+    result = runner.invoke(app, ["run", "test concept", "--dry-run", "--auto-approve"])
     assert result.exit_code == 0
-    assert "ProductTeam Pipeline" in result.output

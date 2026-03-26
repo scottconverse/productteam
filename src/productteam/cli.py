@@ -215,86 +215,41 @@ def config_show(ctx: typer.Context) -> None:
 # productteam run
 # ---------------------------------------------------------------------------
 
-PIPELINE_STEPS = [
-    {
-        "number": 1,
-        "title": "PRD Writer",
-        "instructions": [
-            'Tell Claude: "Read the PRD Writer skill at .claude/skills/prd-writer/SKILL.md and write a PRD for: [your concept]"',
-        ],
-        "gate": "Review and approve the PRD before continuing.",
-    },
-    {
-        "number": 2,
-        "title": "Planner",
-        "instructions": [
-            'Tell Claude: "Read the Planner skill at .claude/skills/planner/SKILL.md and create sprint contracts from the PRD at docs/PRD.md"',
-        ],
-        "gate": "Review and approve the sprint plan before continuing.",
-    },
-    {
-        "number": 3,
-        "title": "Builder + Evaluator Loop",
-        "instructions": [
-            'Tell Claude: "Read the Builder skill at .claude/skills/builder/SKILL.md and implement sprint-001.yaml"',
-            'Then: "Read the Evaluator skill at .claude/skills/evaluator/SKILL.md and evaluate sprint 001"',
-            "Loop until PASS (max 3 loops).",
-            "Repeat for each sprint.",
-        ],
-        "gate": None,
-    },
-    {
-        "number": 4,
-        "title": "Doc Writer",
-        "instructions": [
-            'Tell Claude: "Read the Doc Writer skill at .claude/skills/doc-writer/SKILL.md and write documentation"',
-        ],
-        "gate": None,
-    },
-    {
-        "number": 5,
-        "title": "Design Review",
-        "instructions": [
-            'Tell Claude: "Read the Design Evaluator skill at .claude/skills/evaluator-design/SKILL.md and evaluate all visual artifacts"',
-        ],
-        "gate": None,
-    },
-    {
-        "number": 6,
-        "title": "Ship",
-        "instructions": [
-            "Run the pre-ship checklist. Commit and push.",
-        ],
-        "gate": None,
-    },
-]
-
-
-def _print_step(step: dict) -> None:
-    """Print a single pipeline step to the console."""
-    console.print(f"\n[bold cyan]Step {step['number']}: {step['title']}[/bold cyan]")
-    for line in step["instructions"]:
-        console.print(f"  {line}")
-    if step["gate"]:
-        console.print(f"  [yellow]Gate:[/yellow] {step['gate']}")
-
 
 @app.command("run")
 def run_cmd(
-    directory: Optional[Path] = typer.Argument(
-        None, help="Project directory (default: current directory)"
+    concept: Optional[str] = typer.Argument(
+        None, help="The product concept to build. Optional if resuming."
     ),
-    step: Optional[int] = typer.Option(
-        None, "--step", "-s", help="Print instructions for a single step (1-6)"
+    step: Optional[str] = typer.Option(
+        None, "--step", help="Run only a specific stage (prd|plan|build|evaluate|document|ship)"
+    ),
+    sprint: Optional[str] = typer.Option(
+        None, "--sprint", help="Target a specific sprint (with --step build or evaluate)"
+    ),
+    auto_approve: bool = typer.Option(
+        False, "--auto-approve", help="Skip interactive approval gates"
+    ),
+    rebuild: bool = typer.Option(
+        False, "--rebuild", help="Force rebuild even if a sprint has already passed"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would happen without calling the LLM"
+    ),
+    directory: Optional[Path] = typer.Option(
+        None, "--dir", "-d", help="Project directory (default: current directory)"
     ),
 ) -> None:
-    """Print the ProductTeam pipeline steps to follow in Claude Code."""
-    from productteam.config import find_config, load_config
-    from productteam.scaffold import read_project_state
+    """Run the full product development pipeline."""
+    import asyncio
+
+    from productteam.config import load_config
+    from productteam.providers.factory import get_provider
+    from productteam.supervisor import Supervisor
 
     target = (directory or Path.cwd()).resolve()
 
-    # 1. Check .productteam/ exists
+    # Check .productteam/ exists
     pt_dir = target / ".productteam"
     if not pt_dir.exists():
         error_console.print(
@@ -303,7 +258,7 @@ def run_cmd(
         )
         raise typer.Exit(code=1)
 
-    # 2. Check productteam.toml exists and is valid
+    # Check productteam.toml exists and is valid
     config_path = target / "productteam.toml"
     if not config_path.exists():
         error_console.print(
@@ -313,71 +268,61 @@ def run_cmd(
         raise typer.Exit(code=1)
 
     try:
-        load_config(config_path)
+        config = load_config(config_path)
     except Exception as exc:
         error_console.print(f"[red]Error:[/red] productteam.toml is invalid: {exc}")
         raise typer.Exit(code=1)
 
-    # --step N: print just one step
-    if step is not None:
-        matching = [s for s in PIPELINE_STEPS if s["number"] == step]
-        if not matching:
-            error_console.print(
-                f"[red]Error:[/red] Invalid step number {step}. Choose 1-{len(PIPELINE_STEPS)}."
+    # Create provider (skip for dry run)
+    provider = None
+    if not dry_run:
+        try:
+            provider = get_provider(
+                provider=config.pipeline.provider,
+                model=config.pipeline.model,
+                api_base=config.pipeline.api_base,
             )
+        except Exception as exc:
+            error_console.print(f"[red]Error:[/red] {exc}")
             raise typer.Exit(code=1)
-        _print_step(matching[0])
-        return
 
-    # 3. Print full pipeline header
-    console.print("\n[bold]ProductTeam Pipeline[/bold]")
-    console.print("=" * 22)
+    if provider:
+        console.print(
+            f"[bold]ProductTeam Pipeline[/bold] "
+            f"[dim](provider: {provider.name()}, model: {provider.model_id()})[/dim]"
+        )
+    else:
+        console.print("[bold]ProductTeam Pipeline[/bold] [dim](dry run)[/dim]")
 
-    for s in PIPELINE_STEPS:
-        _print_step(s)
+    use_auto = auto_approve or config.pipeline.auto_approve
 
-    # 4. Show current pipeline status if state exists
-    state = read_project_state(target)
-    sprints = state["sprints"]
-    evaluations = state["evaluations"]
+    supervisor = Supervisor(
+        project_dir=target,
+        config=config,
+        provider=provider,
+        auto_approve=use_auto,
+    )
 
-    if sprints or evaluations:
-        console.print("\n[bold]Current Pipeline Status[/bold]")
-        console.print("-" * 26)
+    result = asyncio.run(
+        supervisor.run(
+            concept=concept or "",
+            step=step,
+            sprint=sprint,
+            rebuild=rebuild,
+            dry_run=dry_run,
+        )
+    )
 
-        if sprints:
-            sprint_status_styles = {
-                "planned": "blue",
-                "building": "yellow",
-                "evaluating": "cyan",
-                "passed": "green",
-                "needs_work": "red",
-                "unknown": "dim",
-            }
-            sprint_table = Table(title="Sprints", box=box.ROUNDED)
-            sprint_table.add_column("Sprint", style="bold")
-            sprint_table.add_column("Status")
-            for sprint in sprints:
-                s = sprint["status"]
-                style = sprint_status_styles.get(s, "white")
-                sprint_table.add_row(sprint["name"], f"[{style}]{s}[/{style}]")
-            console.print(sprint_table)
-
-        if evaluations:
-            verdict_styles = {
-                "passed": "green",
-                "needs_work": "red",
-                "pending": "yellow",
-                "unknown": "dim",
-            }
-            eval_table = Table(title="Evaluations", box=box.ROUNDED)
-            eval_table.add_column("Evaluation", style="bold")
-            eval_table.add_column("Verdict")
-            for ev in evaluations:
-                v = ev["verdict"]
-                style = verdict_styles.get(v, "white")
-                eval_table.add_row(ev["name"], f"[{style}]{v}[/{style}]")
-            console.print(eval_table)
+    if result.status == "complete":
+        console.print("\n[bold green]Pipeline complete.[/bold green]")
+    elif result.status == "partial":
+        console.print("\n[yellow]Pipeline paused. Run again to resume.[/yellow]")
+    elif result.status == "stuck":
+        console.print("\n[red]Pipeline stuck. Check the output above.[/red]")
+        raise typer.Exit(code=1)
+    elif result.status == "failed":
+        console.print("\n[red]Pipeline failed.[/red]")
+        raise typer.Exit(code=1)
 
 
 @config_app.command("set")
