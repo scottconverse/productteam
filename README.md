@@ -2,7 +2,7 @@
 
 **Turn a product concept into shipping code.**
 
-ProductTeam is an AI-powered product development pipeline. You describe what you want to build. It writes the PRD, plans the sprints, builds the code, evaluates the results, writes the docs, and ships. Eight specialized agents, three approval gates, one CLI.
+ProductTeam is a standalone AI-powered product development pipeline. You describe what you want to build. It writes the PRD, plans the sprints, builds the code, evaluates the results, writes the docs, and ships. Eight specialized agents, three approval gates, one CLI. No Claude Code required — works with Anthropic, OpenAI, Ollama (free/local), or Gemini.
 
 ## Install
 
