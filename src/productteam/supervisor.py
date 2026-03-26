@@ -209,8 +209,16 @@ class Supervisor:
         # 2. Plan (doer — writes sprint YAML files to .productteam/sprints/)
         if not _is_stage_complete(self.state, "plan") or rebuild:
             prd_content = self._read_artifact("prd")
+            max_sprints = self.config.pipeline.max_sprints
+            plan_context = (
+                f"{prd_content}\n\n"
+                f"--- Pipeline constraint ---\n"
+                f"Produce at most {max_sprints} sprint contracts. "
+                f"If the PRD describes more work than fits in {max_sprints} sprints, "
+                f"prioritize the most critical features and note what was deferred."
+            )
             result = await self._run_tool_loop_stage(
-                PipelineStage.PLAN, "planner", prd_content,
+                PipelineStage.PLAN, "planner", plan_context,
                 timeout_seconds=self.config.pipeline.planner_timeout_seconds,
             )
             stages.append(result)

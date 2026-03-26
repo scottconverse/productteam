@@ -13,6 +13,7 @@ class PipelineConfig(BaseModel):
     model: str = "claude-sonnet-4-6"
     api_base: str = ""
     max_loops: int = 3
+    max_sprints: int = 4
     require_evaluator: bool = True
     require_design_review: bool = True
     stage_timeout_seconds: int = 300

@@ -315,6 +315,7 @@ provider = "anthropic"          # anthropic | openai | ollama | gemini
 model = "claude-sonnet-4-6"
 api_base = ""                   # for openai-compatible servers
 max_loops = 3                   # build-evaluate loop limit
+max_sprints = 4                 # max sprint contracts the Planner will produce
 require_evaluator = true
 require_design_review = true
 stage_timeout_seconds = 300     # thinker stages (PRD Writer, Design Evaluator)

@@ -115,7 +115,7 @@ deliverables, and acceptance criteria look right before the Builder starts.
 2. **Every acceptance criterion must be testable.** If the Evaluator can't verify it with a yes/no answer, rewrite it.
 3. **Be specific about file paths.** The Builder shouldn't have to guess where things go.
 4. **Reference existing patterns.** If the codebase already has a convention (e.g., specific framework for CLI, specific library for models), state it as a constraint.
-5. **Don't over-decompose.** A sprint should be completable in one session. If the PRD is too big, propose multiple sprints and build the first one.
+5. **Don't over-decompose.** A sprint should be completable in one session. If the PRD is too big, produce only the number of sprints specified in the pipeline constraint (usually 4). Prioritize the most critical features. Note what was deferred in the final sprint's `notes` field.
 6. **Number sprints sequentially.** Use `list_dir` to check `.productteam/sprints/` for existing sprint files and use the next available number. Write each sprint as its own `.yaml` file using `write_file`. Never combine multiple sprints into one file.
 7. **Release sprints MUST include documentation and publishing.** When a sprint produces shippable code, the deliverables MUST include: README updates (test counts, new features, fixes), documentation updates, and any publishing steps. Code without updated docs is not shippable.
 8. **Docs deliverables are testable.** Acceptance criteria for docs include: "README reflects current test count", "Install commands are correct", "No placeholder URLs remain".
