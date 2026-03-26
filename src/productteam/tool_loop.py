@@ -104,16 +104,36 @@ def _validate_path(path_str: str, project_dir: Path) -> Path | str:
 
 
 def _validate_command(command: str) -> str | None:
-    """Check if a command tries to access forbidden paths.
+    """Check if a command tries to access credentials or forbidden paths.
 
     Returns an error string if the command is dangerous, None if OK.
+    This is defense-in-depth — the sandbox boundary is path validation,
+    not this denylist.
     """
     for forbidden in FORBIDDEN_PATHS:
         if forbidden in command:
             return f"Command accesses forbidden path: {forbidden}"
-    # Block attempts to read environment/credentials
-    if "printenv" in command and ("API_KEY" in command or "TOKEN" in command):
-        return "Command attempts to read credential environment variables"
+
+    # Block commands that dump environment variables (credential leakage)
+    _lower = command.lower()
+    _ENV_DUMP_PATTERNS = [
+        "printenv", "/proc/self/environ", "/proc/environ",
+        "env | ", "env|", "export | ", "export|",
+        "set | grep", "set |grep",
+    ]
+    for pattern in _ENV_DUMP_PATTERNS:
+        if pattern in _lower:
+            return "Command attempts to read environment variables"
+
+    # Block credential-adjacent keywords in env access
+    _CRED_KEYWORDS = ["api_key", "token", "secret", "password", "credential"]
+    if any(kw in _lower for kw in _CRED_KEYWORDS):
+        # Allow if the keyword is in a file path within the project (e.g. test_api_key.py)
+        # but block if combined with env-reading commands
+        _ENV_CMDS = ["echo $", "echo ${", "printenv", "env", "export", "os.environ"]
+        if any(cmd in _lower for cmd in _ENV_CMDS):
+            return "Command attempts to read credential environment variables"
+
     return None
 
 
@@ -123,6 +143,8 @@ def _execute_tool(
     project_dir: Path,
 ) -> str:
     """Execute a single tool call and return the result as a string."""
+    MAX_READ_BYTES = 100 * 1024  # 100KB cap on file reads
+
     if tool_name == "read_file":
         path_str = tool_input.get("path", "")
         validated = _validate_path(path_str, project_dir)
@@ -133,6 +155,15 @@ def _execute_tool(
         if not validated.is_file():
             return json.dumps({"error": f"Not a file: {path_str}"})
         try:
+            file_size = validated.stat().st_size
+            if file_size > MAX_READ_BYTES:
+                # Read only the first 100KB and warn
+                content = validated.read_bytes()[:MAX_READ_BYTES].decode("utf-8", errors="replace")
+                return (
+                    content
+                    + f"\n\n[TRUNCATED: file is {file_size:,} bytes, "
+                    f"showing first {MAX_READ_BYTES // 1024}KB]"
+                )
             content = validated.read_text(encoding="utf-8")
             return content
         except Exception as e:

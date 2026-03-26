@@ -86,6 +86,35 @@ def test_validate_command_env_cred_blocked():
     assert result is not None
 
 
+def test_validate_command_env_pipe_blocked():
+    """env | grep pattern is blocked."""
+    assert _validate_command("env | grep KEY") is not None
+    assert _validate_command("env|grep SECRET") is not None
+
+
+def test_validate_command_proc_environ_blocked():
+    """Reading /proc/self/environ is blocked."""
+    result = _validate_command("cat /proc/self/environ")
+    assert result is not None
+
+
+def test_validate_command_export_dump_blocked():
+    """export | grep pattern is blocked."""
+    assert _validate_command("export | grep TOKEN") is not None
+
+
+def test_validate_command_cred_keyword_in_test_file_allowed():
+    """File names containing 'api_key' are allowed (e.g. test_api_key.py)."""
+    # Normal file operation — no env-reading command
+    assert _validate_command("python test_api_key.py") is None
+
+
+def test_validate_command_echo_env_var_blocked():
+    """echo $API_KEY is blocked."""
+    result = _validate_command("echo $API_KEY")
+    assert result is not None
+
+
 # ---------------------------------------------------------------------------
 # Tool execution tests
 # ---------------------------------------------------------------------------
@@ -103,6 +132,17 @@ def test_execute_read_file_not_found(tmp_path):
     result = _execute_tool("read_file", {"path": "nonexistent.txt"}, tmp_path)
     data = json.loads(result)
     assert "error" in data
+
+
+def test_execute_read_file_large_file_truncated(tmp_path):
+    """read_file truncates files larger than 100KB."""
+    large_content = "x" * (200 * 1024)  # 200KB
+    (tmp_path / "big.txt").write_text(large_content)
+    result = _execute_tool("read_file", {"path": "big.txt"}, tmp_path)
+    assert "[TRUNCATED:" in result
+    assert "200KB" not in result  # should not contain the full file
+    # Should contain approximately 100KB of content
+    assert len(result) < 110 * 1024
 
 
 def test_execute_read_file_traversal_blocked(tmp_path):

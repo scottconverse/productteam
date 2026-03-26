@@ -228,27 +228,30 @@ class Supervisor:
                 f"Write documentation for the project. Concept: {concept}",
             )
             stages.append(result)
+            if result.status != "complete":
+                return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
-        # 4b. Design Evaluation loop (mirrors build-evaluate pattern)
+        # 4b. Design Evaluation (single pass — no retry loop because there is
+        # no mechanism to route back to Doc Writer/UI Builder to fix issues)
         if self.config.pipeline.require_design_review:
             if not _is_stage_complete(self.state, "evaluate-design") or rebuild:
-                for design_loop in range(1, self.config.pipeline.max_loops + 1):
-                    result = await self._run_tool_loop_stage(
-                        PipelineStage.EVALUATE_DESIGN, "evaluator-design",
-                        f"Evaluate design quality. Read docs/index.html, docs/terms.html, "
-                        f"and README.md. Concept: {concept}",
-                    )
-                    stages.append(result)
-                    if result.status != "complete":
-                        return SupervisorResult(concept=concept, stages=stages, status="stuck")
+                result = await self._run_tool_loop_stage(
+                    PipelineStage.EVALUATE_DESIGN, "evaluator-design",
+                    f"Evaluate design quality. Read docs/index.html, docs/terms.html, "
+                    f"and README.md. Concept: {concept}",
+                )
+                stages.append(result)
+                if result.status != "complete":
+                    return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
-                    verdict = self._parse_verdict(result.raw_response)
-                    console.print(f"  Design verdict: [{'green' if verdict == 'pass' else 'red'}]{verdict}[/]")
-                    if verdict == "pass":
-                        break
-                    if verdict == "fail" or design_loop == self.config.pipeline.max_loops:
-                        console.print("[red]Design evaluation did not pass after max loops.[/red]")
-                        return SupervisorResult(concept=concept, stages=stages, status="stuck")
+                verdict = self._parse_verdict(result.raw_response)
+                console.print(f"  Design verdict: [{'green' if verdict == 'pass' else 'red'}]{verdict}[/]")
+                if verdict != "pass":
+                    console.print(
+                        f"[red]Design evaluation returned {verdict.upper()}.[/red] "
+                        "Re-run doc-writer (--step document) then re-run design eval."
+                    )
+                    return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
         # 5. Ship gate
         if not await self._gate("Ship Approval", ""):
@@ -475,6 +478,17 @@ class Supervisor:
             build_artifact = artifact_dir / "build-artifact.md"
             build_artifact.write_text(build_result.final_text, encoding="utf-8")
 
+            # Skip evaluation if disabled
+            if not self.config.pipeline.require_evaluator:
+                console.print("  [dim]Evaluator disabled — auto-passing[/dim]")
+                self.state["stages"][f"build:{sprint_name}"] = {"status": "passed"}
+                _save_state(self.project_dir, self.state)
+                return StageResult(
+                    stage=PipelineStage.BUILD,
+                    status="complete",
+                    artifact_path=str(build_artifact),
+                )
+
             # Evaluate
             self.state["stages"]["evaluate"] = {
                 "status": "running",
@@ -638,8 +652,9 @@ class Supervisor:
     def _summarize_eval_feedback(self, eval_response: str, loop_num: int) -> str:
         """Extract actionable findings from an evaluation report.
 
-        Returns only failed acceptance criteria and CRITICAL/HIGH findings
+        Returns failed acceptance criteria and CRITICAL/HIGH/MEDIUM findings
         to keep the Builder's context window focused on what needs fixing.
+        LOW findings are excluded — they rarely drive a NEEDS_WORK verdict.
         """
         try:
             data = yaml.safe_load(eval_response)
@@ -651,7 +666,7 @@ class Supervisor:
                             f"FAIL: {crit.get('criterion', '')} — {crit.get('evidence', '')}"
                         )
                 for finding in data.get("additional_findings", []):
-                    if finding.get("severity", "") in ("CRITICAL", "HIGH"):
+                    if finding.get("severity", "") in ("CRITICAL", "HIGH", "MEDIUM"):
                         lines.append(
                             f"{finding['severity']}: {finding.get('finding', '')} "
                             f"— {finding.get('suggestion', '')}"

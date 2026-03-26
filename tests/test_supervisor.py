@@ -273,6 +273,42 @@ async def test_build_evaluate_max_loops_exhausted(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# require_evaluator config
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_evaluate_skips_eval_when_disabled(tmp_path):
+    """Build-evaluate loop skips evaluator when require_evaluator=false."""
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
+        "sprint: 1\ntitle: Test\n"
+    )
+
+    config = _make_config(pipeline={
+        "provider": "anthropic", "model": "test", "max_loops": 3,
+        "stage_timeout_seconds": 10, "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5, "auto_approve": False,
+        "require_evaluator": False,
+    })
+
+    mock_provider = AsyncMock()
+    # Builder completes — evaluator should never be called
+    mock_provider.complete_with_tools = AsyncMock(return_value={
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Built."}],
+        "stop_reason": "end_turn",
+    })
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor._build_evaluate_loop("sprint-001")
+
+    assert result.status == "complete"
+    # Only one call (builder) — no evaluator call
+    assert mock_provider.complete_with_tools.call_count == 1
+
+
+# ---------------------------------------------------------------------------
 # Gate approval tests
 # ---------------------------------------------------------------------------
 
@@ -372,7 +408,7 @@ def test_parse_verdict_defaults_to_needs_work(tmp_path):
 
 
 def test_summarize_eval_feedback_extracts_failures(tmp_path):
-    """Summarizer extracts only FAIL criteria and CRITICAL/HIGH findings."""
+    """Summarizer extracts FAIL criteria and CRITICAL/HIGH/MEDIUM findings."""
     _init_project(tmp_path)
     config = _make_config()
     supervisor = Supervisor(tmp_path, config, AsyncMock())
@@ -390,6 +426,9 @@ def test_summarize_eval_feedback_extracts_failures(tmp_path):
         "  - severity: LOW\n"
         "    finding: Minor style issue\n"
         "    suggestion: Fix later\n"
+        "  - severity: MEDIUM\n"
+        "    finding: Missing error handling\n"
+        "    suggestion: Add try/except\n"
         "  - severity: CRITICAL\n"
         "    finding: SQL injection\n"
         "    suggestion: Use parameterized queries\n"
@@ -399,6 +438,7 @@ def test_summarize_eval_feedback_extracts_failures(tmp_path):
     result = supervisor._summarize_eval_feedback(yaml_eval, 1)
     assert "FAIL: Feature B works" in result
     assert "CRITICAL: SQL injection" in result
+    assert "MEDIUM: Missing error handling" in result  # MEDIUM included
     assert "Feature A works" not in result  # PASS criteria excluded
     assert "Minor style issue" not in result  # LOW finding excluded
     assert "Feature B is broken" in result  # summary included
