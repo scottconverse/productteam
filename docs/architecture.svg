@@ -1,0 +1,270 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 820" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff"/>
+    </marker>
+    <marker id="arrow-yellow" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#d29922"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#3fb950"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1080" height="820" fill="#0e1117" rx="12"/>
+
+  <!-- Title -->
+  <text x="540" y="40" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">ProductTeam v2.0 Architecture</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- USER INPUT layer -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="30" y="60" width="1020" height="70" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="50" y="82" fill="#8b949e" font-size="10" font-family="'SF Mono', monospace" text-transform="uppercase" letter-spacing="1.5">USER INPUT</text>
+
+  <!-- CLI box -->
+  <rect x="50" y="90" width="200" height="30" rx="4" fill="#0e1117" stroke="#58a6ff"/>
+  <text x="150" y="110" text-anchor="middle" fill="#58a6ff" font-size="12" font-family="'SF Mono', monospace">productteam run</text>
+
+  <!-- Forge box -->
+  <rect x="270" y="90" width="200" height="30" rx="4" fill="#0e1117" stroke="#58a6ff"/>
+  <text x="370" y="110" text-anchor="middle" fill="#58a6ff" font-size="12" font-family="'SF Mono', monospace">productteam forge</text>
+
+  <!-- Doctor box -->
+  <rect x="490" y="90" width="200" height="30" rx="4" fill="#0e1117" stroke="#58a6ff"/>
+  <text x="590" y="110" text-anchor="middle" fill="#58a6ff" font-size="12" font-family="'SF Mono', monospace">productteam doctor</text>
+
+  <!-- Config box -->
+  <rect x="710" y="90" width="200" height="30" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="810" y="110" text-anchor="middle" fill="#8b949e" font-size="12" font-family="'SF Mono', monospace">productteam config</text>
+
+  <!-- Arrow from CLI to Supervisor -->
+  <line x1="150" y1="130" x2="150" y2="165" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrow from Forge to Daemon -->
+  <line x1="370" y1="130" x2="370" y2="165" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- ORCHESTRATION layer -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="30" y="165" width="700" height="115" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="50" y="187" fill="#8b949e" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">ORCHESTRATION</text>
+
+  <!-- Supervisor -->
+  <rect x="50" y="195" width="280" height="70" rx="6" fill="#0e1117" stroke="#58a6ff" stroke-width="2"/>
+  <text x="190" y="220" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">Supervisor</text>
+  <text x="190" y="238" text-anchor="middle" fill="#8b949e" font-size="10">state.json | gates | resume | stuck detection</text>
+  <text x="190" y="253" text-anchor="middle" fill="#8b949e" font-size="10">build-evaluate loop (max 3)</text>
+
+  <!-- Forge Daemon -->
+  <rect x="350" y="195" width="280" height="70" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
+  <text x="490" y="220" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">Forge Daemon</text>
+  <text x="490" y="238" text-anchor="middle" fill="#8b949e" font-size="10">file queue | poll | auto-approve</text>
+  <text x="490" y="253" text-anchor="middle" fill="#8b949e" font-size="10">webhook/slack notifications</text>
+
+  <!-- Arrow from Daemon to Supervisor -->
+  <line x1="350" y1="230" x2="340" y2="230" stroke="#d29922" stroke-width="1.5" marker-end="url(#arrow-yellow)"/>
+
+  <!-- Doctor (standalone) -->
+  <rect x="750" y="165" width="300" height="115" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="770" y="187" fill="#8b949e" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">DIAGNOSTICS</text>
+  <rect x="770" y="195" width="260" height="70" rx="6" fill="#0e1117" stroke="#3fb950"/>
+  <text x="900" y="218" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">Doctor</text>
+  <text x="900" y="236" text-anchor="middle" fill="#8b949e" font-size="10">python | config | provider | API key</text>
+  <text x="900" y="251" text-anchor="middle" fill="#8b949e" font-size="10">skills | forge queue | disk | thinker/doer</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- THINKER STAGES -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="30" y="300" width="505" height="200" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="50" y="322" fill="#58a6ff" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">THINKER STAGES — single provider.complete() call</text>
+
+  <!-- PRD Writer -->
+  <rect x="50" y="335" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
+  <text x="122" y="358" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">PRD Writer</text>
+  <text x="122" y="375" text-anchor="middle" fill="#8b949e" font-size="9">concept → PRD</text>
+  <text x="122" y="390" text-anchor="middle" fill="#d29922" font-size="9">GATE: approve PRD</text>
+
+  <!-- Planner -->
+  <rect x="210" y="335" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
+  <text x="282" y="358" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Planner</text>
+  <text x="282" y="375" text-anchor="middle" fill="#8b949e" font-size="9">PRD → sprint contracts</text>
+  <text x="282" y="390" text-anchor="middle" fill="#d29922" font-size="9">GATE: approve sprints</text>
+
+  <!-- Arrow PRD to Planner -->
+  <line x1="195" y1="367" x2="205" y2="367" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Evaluator -->
+  <rect x="50" y="415" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
+  <text x="122" y="438" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Evaluator</text>
+  <text x="122" y="455" text-anchor="middle" fill="#8b949e" font-size="9">code → PASS/FAIL</text>
+  <text x="122" y="470" text-anchor="middle" fill="#f85149" font-size="9">skeptical by default</text>
+
+  <!-- Design Evaluator -->
+  <rect x="210" y="415" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
+  <text x="282" y="435" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Design</text>
+  <text x="282" y="448" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Evaluator</text>
+  <text x="282" y="465" text-anchor="middle" fill="#8b949e" font-size="9">4 dimensions, 1-5 scale</text>
+
+  <!-- Doc Writer -->
+  <rect x="370" y="415" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
+  <text x="442" y="438" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Doc Writer</text>
+  <text x="442" y="455" text-anchor="middle" fill="#8b949e" font-size="9">code → README, docs</text>
+  <text x="442" y="470" text-anchor="middle" fill="#8b949e" font-size="9">reads, never fabricates</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- DOER STAGES -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="555" y="300" width="495" height="200" rx="8" fill="#161b22" stroke="#d29922" stroke-dasharray="4,4"/>
+  <text x="575" y="322" fill="#d29922" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">DOER STAGES — agentic tool-use loop</text>
+
+  <!-- Builder -->
+  <rect x="575" y="335" width="210" height="150" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
+  <text x="680" y="358" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">Builder</text>
+  <text x="680" y="375" text-anchor="middle" fill="#8b949e" font-size="10">sprint contract → code</text>
+
+  <!-- Tool icons inside Builder -->
+  <rect x="590" y="390" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="635" y="405" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">read_file</text>
+
+  <rect x="690" y="390" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="735" y="405" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">write_file</text>
+
+  <rect x="590" y="418" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="635" y="433" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">run_bash</text>
+
+  <rect x="690" y="418" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="735" y="433" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">list_dir</text>
+
+  <text x="680" y="465" text-anchor="middle" fill="#8b949e" font-size="9">max 50 tool calls | loop detection</text>
+  <text x="680" y="478" text-anchor="middle" fill="#8b949e" font-size="9">path validation | cmd security</text>
+
+  <!-- UI Builder -->
+  <rect x="805" y="335" width="210" height="150" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
+  <text x="910" y="358" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">UI Builder</text>
+  <text x="910" y="375" text-anchor="middle" fill="#8b949e" font-size="10">sprint → visual artifacts</text>
+
+  <!-- Tool icons inside UI Builder -->
+  <rect x="820" y="390" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="865" y="405" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">read_file</text>
+
+  <rect x="920" y="390" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="965" y="405" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">write_file</text>
+
+  <rect x="820" y="418" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="865" y="433" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">run_bash</text>
+
+  <rect x="920" y="418" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
+  <text x="965" y="433" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">list_dir</text>
+
+  <text x="910" y="465" text-anchor="middle" fill="#8b949e" font-size="9">dark theme | WCAG AA</text>
+  <text x="910" y="478" text-anchor="middle" fill="#8b949e" font-size="9">responsive | same 4 tools</text>
+
+  <!-- Build-Evaluate loop arrow -->
+  <path d="M 195 415 Q 170 405 195 395" fill="none" stroke="#f85149" stroke-width="1.5"/>
+  <line x1="535" y1="460" x2="555" y2="410" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4,4"/>
+  <text x="548" y="445" fill="#f85149" font-size="9" transform="rotate(-50, 548, 445)">NEEDS_WORK</text>
+
+  <!-- Arrow Planner to Builder -->
+  <line x1="355" y1="367" x2="565" y2="367" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Arrow Builder to Evaluator -->
+  <line x1="575" y1="485" x2="195" y2="470" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="385" y="488" text-anchor="middle" fill="#58a6ff" font-size="9">ready for review</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- PROVIDER LAYER -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="30" y="520" width="1020" height="80" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="50" y="542" fill="#8b949e" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">LLM PROVIDER LAYER — providers/</text>
+
+  <rect x="50" y="552" width="150" height="36" rx="4" fill="#0e1117" stroke="#58a6ff"/>
+  <text x="125" y="575" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Anthropic</text>
+
+  <rect x="215" y="552" width="150" height="36" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="290" y="575" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">OpenAI</text>
+
+  <rect x="380" y="552" width="150" height="36" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="455" y="575" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Ollama</text>
+
+  <rect x="545" y="552" width="150" height="36" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="620" y="575" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Gemini</text>
+
+  <!-- Factory -->
+  <rect x="730" y="552" width="300" height="36" rx="4" fill="#0e1117" stroke="#3fb950"/>
+  <text x="880" y="570" text-anchor="middle" fill="#3fb950" font-size="11" font-family="'SF Mono', monospace">get_provider(config) → LLMProvider</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- STATE / STORAGE layer -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="30" y="620" width="505" height="90" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="50" y="642" fill="#8b949e" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">STATE — .productteam/</text>
+
+  <rect x="50" y="652" width="105" height="46" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="102" y="672" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">state.json</text>
+  <text x="102" y="688" text-anchor="middle" fill="#8b949e" font-size="8">pipeline phase</text>
+
+  <rect x="168" y="652" width="90" height="46" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="213" y="672" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">prds/</text>
+  <text x="213" y="688" text-anchor="middle" fill="#8b949e" font-size="8">PRD docs</text>
+
+  <rect x="271" y="652" width="90" height="46" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="316" y="672" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">sprints/</text>
+  <text x="316" y="688" text-anchor="middle" fill="#8b949e" font-size="8">contracts + builds</text>
+
+  <rect x="374" y="652" width="140" height="46" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="444" y="672" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">evaluations/</text>
+  <text x="444" y="688" text-anchor="middle" fill="#8b949e" font-size="8">YAML eval reports</text>
+
+  <!-- FORGE QUEUE -->
+  <rect x="555" y="620" width="495" height="90" rx="8" fill="#161b22" stroke="#d29922" stroke-dasharray="4,4"/>
+  <text x="575" y="642" fill="#d29922" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">FORGE QUEUE — ~/.productteam/forge/queue/</text>
+
+  <rect x="575" y="652" width="120" height="46" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="635" y="672" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">job.json</text>
+  <text x="635" y="688" text-anchor="middle" fill="#8b949e" font-size="8">id, concept, status</text>
+
+  <rect x="708" y="652" width="120" height="46" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="768" y="672" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">gate.json</text>
+  <text x="768" y="688" text-anchor="middle" fill="#8b949e" font-size="8">approval pending</text>
+
+  <rect x="841" y="652" width="90" height="46" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="886" y="672" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">log.txt</text>
+  <text x="886" y="688" text-anchor="middle" fill="#8b949e" font-size="8">append-only</text>
+
+  <rect x="944" y="652" width="90" height="46" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="989" y="672" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="600">dashboard</text>
+  <text x="989" y="688" text-anchor="middle" fill="#8b949e" font-size="8">:7654 HTTP</text>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CONFIG layer -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <rect x="30" y="730" width="1020" height="70" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="50" y="752" fill="#8b949e" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">CONFIGURATION</text>
+
+  <rect x="50" y="760" width="200" height="30" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="150" y="780" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="'SF Mono', monospace">productteam.toml</text>
+
+  <rect x="270" y="760" width="200" height="30" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="370" y="780" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="'SF Mono', monospace">.claude/skills/*.md</text>
+
+  <rect x="490" y="760" width="200" height="30" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="590" y="780" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="'SF Mono', monospace">templates/*.yaml</text>
+
+  <rect x="710" y="760" width="200" height="30" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="810" y="780" text-anchor="middle" fill="#e6edf3" font-size="11" font-family="'SF Mono', monospace">ENV: *_API_KEY</text>
+
+  <!-- Legend -->
+  <rect x="50" y="808" width="12" height="4" rx="2" fill="#58a6ff"/>
+  <text x="68" y="813" fill="#8b949e" font-size="9">Thinker (any provider)</text>
+
+  <rect x="220" y="808" width="12" height="4" rx="2" fill="#d29922"/>
+  <text x="238" y="813" fill="#8b949e" font-size="9">Doer (tool-use loop)</text>
+
+  <rect x="390" y="808" width="12" height="4" rx="2" fill="#3fb950"/>
+  <text x="408" y="813" fill="#8b949e" font-size="9">Diagnostics / Factory</text>
+
+  <rect x="560" y="808" width="12" height="4" rx="2" fill="#f85149"/>
+  <text x="578" y="813" fill="#8b949e" font-size="9">Build-Evaluate loop</text>
+</svg>

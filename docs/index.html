@@ -549,6 +549,122 @@
   </div>
 </section>
 
+<!-- Architecture -->
+<section class="pipeline-section">
+  <div class="container">
+    <p class="section-label">Architecture</p>
+    <h2 class="section-title">How it really works</h2>
+    <p class="section-desc">Six layers, from your command to files on disk. Every component has one job.</p>
+
+    <!-- SVG Diagram -->
+    <div style="margin:32px 0;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <img src="architecture.svg" alt="ProductTeam v2.0 Architecture Diagram" style="width:100%;display:block;"/>
+    </div>
+
+    <!-- Component descriptions -->
+    <div style="display:grid;grid-template-columns:1fr;gap:24px;margin-top:32px;">
+
+      <!-- Supervisor -->
+      <div style="background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:24px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent);">supervisor.py</span>
+          <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Orchestration</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">The brain of the system. When you run <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam run "concept"</code>, the Supervisor takes over. It reads your config, loads pipeline state from <code style="color:var(--green);font-family:var(--mono);font-size:13px;">state.json</code>, and launches each stage in sequence.</p>
+        <p style="color:var(--muted);font-size:13px;line-height:1.6;">It enforces three approval gates (PRD, Sprint, Ship) where it pauses for your input. Between gates, it runs autonomously. It manages the build-evaluate loop: Builder produces code, Evaluator grades it, and if the verdict is NEEDS_WORK, the Supervisor feeds the feedback back to the Builder and loops (max 3 times). If an agent gets stuck (timeout, infinite loop, max tool calls), the Supervisor detects it and escalates to you with full context. On every state change, it writes <code style="color:var(--green);font-family:var(--mono);font-size:13px;">state.json</code> so you can resume later with just <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam run</code>.</p>
+      </div>
+
+      <!-- Thinker/Doer split -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+            <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent);">Thinker Stages</span>
+            <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Any Provider</span>
+          </div>
+          <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">PRD Writer, Planner, Evaluator, Design Evaluator, and Doc Writer are <strong>thinkers</strong>. They take context in and produce a text artifact out. One LLM call: system prompt (the SKILL.md file), user message (the context), response (the artifact).</p>
+          <p style="color:var(--muted);font-size:13px;line-height:1.6;">Because they don't need to touch the filesystem, they work with any provider &mdash; Anthropic, OpenAI, Ollama, Gemini. The Supervisor calls <code style="color:var(--green);font-family:var(--mono);font-size:13px;">provider.complete(system, messages)</code> and writes the result to <code style="color:var(--green);font-family:var(--mono);font-size:13px;">.productteam/</code>.</p>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--yellow);border-radius:8px;padding:24px;">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+            <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--yellow);">Doer Stages</span>
+            <span style="font-size:12px;color:var(--yellow);border:1px solid var(--yellow);padding:2px 8px;border-radius:12px;">Tool-Use Loop</span>
+          </div>
+          <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">Builder and UI Builder are <strong>doers</strong>. They need to read files, write code, run tests, and react to results. A single LLM call can't do that. They use an agentic tool-use loop.</p>
+          <p style="color:var(--muted);font-size:13px;line-height:1.6;">The loop: call LLM with 4 tools (read_file, write_file, run_bash, list_dir). LLM says "write this to src/app.py" &mdash; the loop writes it. LLM says "run pytest" &mdash; the loop runs it and sends back stdout/stderr. This continues until the LLM stops calling tools and says "ready for review." Path validation blocks traversal attacks. Command validation blocks credential access. Loop detection catches the LLM calling the same tool with identical args 3 times.</p>
+        </div>
+      </div>
+
+      <!-- Tool Loop -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);">tool_loop.py</span>
+          <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Agentic Runtime</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:16px;">The tool loop is deliberately minimal. Four tools, no more:</p>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;">
+            <div style="font-family:var(--mono);font-size:13px;color:var(--green);font-weight:600;">read_file</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Read any file in the project directory. Path must be relative, no traversal.</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;">
+            <div style="font-family:var(--mono);font-size:13px;color:var(--green);font-weight:600;">write_file</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Write content to a file. Creates parent directories. Same path restrictions.</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;">
+            <div style="font-family:var(--mono);font-size:13px;color:var(--green);font-weight:600;">run_bash</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Run a shell command. Timeout per call. Blocks .ssh, .aws, credential paths.</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;">
+            <div style="font-family:var(--mono);font-size:13px;color:var(--green);font-weight:600;">list_dir</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">List files and directories. Shows [FILE] and [DIR] prefixes.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Forge -->
+      <div style="background:var(--surface);border:1px solid var(--yellow);border-radius:8px;padding:24px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--yellow);">forge/</span>
+          <span style="font-size:12px;color:var(--yellow);border:1px solid var(--yellow);padding:2px 8px;border-radius:12px;">Phone to Product</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">Forge is three components working together. The <strong>queue</strong> (<code style="font-family:var(--mono);font-size:13px;color:var(--green);">queue.py</code>) is file-based &mdash; each job is a directory with job.json, gate.json, and log.txt. Zero infrastructure, no database. The <strong>daemon</strong> (<code style="font-family:var(--mono);font-size:13px;color:var(--green);">daemon.py</code>) polls the queue every 10 seconds. When it finds a new job, it creates a project directory, runs init, and starts the Supervisor with auto-approve. At gates, it writes gate.json and sends a webhook notification.</p>
+        <p style="color:var(--muted);font-size:13px;line-height:1.6;">The <strong>dashboard</strong> (<code style="font-family:var(--mono);font-size:13px;color:var(--green);">dashboard.py</code>) is a single-page app served by Python's stdlib http.server. No framework, no build step. It shows all jobs, live log tailing, and approve/reject buttons. You approve a gate from your phone's browser and the daemon resumes the pipeline.</p>
+      </div>
+
+      <!-- Provider Layer -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);">providers/</span>
+          <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">LLM Abstraction</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">Every LLM call goes through the provider layer. An abstract <code style="font-family:var(--mono);font-size:13px;color:var(--green);">LLMProvider</code> base class defines two methods: <code style="font-family:var(--mono);font-size:13px;color:var(--green);">complete()</code> for thinker stages and <code style="font-family:var(--mono);font-size:13px;color:var(--green);">complete_with_tools()</code> for doer stages. Four implementations: Anthropic (SDK), OpenAI-compatible (httpx), Ollama (native API), Gemini (REST).</p>
+        <p style="color:var(--muted);font-size:13px;line-height:1.6;">The factory function <code style="font-family:var(--mono);font-size:13px;color:var(--green);">get_provider(config)</code> reads your productteam.toml and returns the right provider. API keys come from environment variables only &mdash; never from config files, never logged, never in state.json.</p>
+      </div>
+
+      <!-- Doctor -->
+      <div style="background:var(--surface);border:1px solid var(--green);border-radius:8px;padding:24px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);">doctor.py</span>
+          <span style="font-size:12px;color:var(--green);border:1px solid var(--green);padding:2px 8px;border-radius:12px;">Diagnostics</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;"><code style="font-family:var(--mono);font-size:13px;color:var(--green);">productteam doctor</code> checks 8 things: Python version, package version, productteam.toml validity, .productteam/ directory, skills directory (all 8 present), provider configuration and API key, forge queue health, and disk space. It prints the thinker/doer note unconditionally &mdash; that's the thing users hit first.</p>
+        <p style="color:var(--muted);font-size:13px;line-height:1.6;">Exit code 0 if everything passes. Exit code 1 if anything critical is wrong. <code style="font-family:var(--mono);font-size:13px;color:var(--green);">--json</code> flag outputs machine-readable results for scripting. <code style="font-family:var(--mono);font-size:13px;color:var(--green);">--no-network</code> skips API reachability checks.</p>
+      </div>
+
+      <!-- State -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:#e6edf3;">state.json</span>
+          <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Pipeline State</span>
+        </div>
+        <p style="color:var(--text);font-size:14px;line-height:1.6;">The Supervisor writes state.json on every state change. It records which stages are complete, which sprint is being built, what loop iteration the evaluator is on, and when things last changed. When you run <code style="font-family:var(--mono);font-size:13px;color:var(--green);">productteam run</code> without a concept, the Supervisor reads state.json and resumes from exactly where it left off. Sprints that already passed evaluation are skipped. The <code style="font-family:var(--mono);font-size:13px;color:var(--green);">--rebuild</code> flag forces a full rebuild.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
 <!-- Comparison -->
 <section class="compare-section">
   <div class="container">

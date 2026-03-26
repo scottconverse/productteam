@@ -71,6 +71,45 @@ This is the core design decision. Stages split into two types:
 
 **Doer stages** run an agentic tool-use loop with exactly four tools: `read_file`, `write_file`, `run_bash`, `list_dir`. The LLM calls tools, the supervisor executes them, results go back to the LLM, repeat until the builder says "ready for review."
 
+## How It Really Works
+
+![Architecture Diagram](docs/architecture.svg)
+
+### The Supervisor (`supervisor.py`)
+
+The orchestrator. When you run `productteam run "concept"`, the Supervisor reads your config, loads pipeline state from `state.json`, and launches each stage in sequence. It enforces three approval gates (PRD, Sprint, Ship), manages the build-evaluate loop (max 3 iterations), detects stuck agents (timeout, infinite loops, max tool calls), and writes state on every change so you can resume with `productteam run`.
+
+### The Tool Loop (`tool_loop.py`)
+
+The agentic runtime for Builder and UI Builder stages. Exactly four tools:
+
+- **`read_file`** — Read any file in the project. Path must be relative, no `..` traversal.
+- **`write_file`** — Write content to a file. Creates parent directories.
+- **`run_bash`** — Run a shell command with timeout. Blocks access to `.ssh/`, `.aws/`, credential paths.
+- **`list_dir`** — List directory contents with `[FILE]` and `[DIR]` prefixes.
+
+The loop calls the LLM, executes any tool calls, sends results back, and repeats until the LLM stops calling tools. Safety: path validation rejects traversal and absolute paths. Command validation blocks credential-adjacent paths. Loop detection catches identical tool+args called 3 times consecutively. Max 50 tool calls per run (configurable).
+
+### Forge (`forge/`)
+
+Three components for headless pipeline execution:
+
+- **Queue** (`queue.py`) — File-based at `~/.productteam/forge/queue/`. Each job is a directory with `job.json`, `gate.json`, and `log.txt`. Zero infrastructure.
+- **Daemon** (`daemon.py`) — Polls queue every 10 seconds. Creates a project, runs init, starts Supervisor with auto-approve. At gates, writes `gate.json` and sends webhook/Slack notifications.
+- **Dashboard** (`dashboard.py`) — Stdlib `http.server` at `http://127.0.0.1:7654`. Job table, live log tailing, approve/reject buttons. No framework, no build step.
+
+### Provider Layer (`providers/`)
+
+Abstract `LLMProvider` with `complete()` (thinkers) and `complete_with_tools()` (doers). Four implementations: Anthropic (SDK), OpenAI-compatible (httpx), Ollama (native API), Gemini (REST). Factory function `get_provider(config)` reads `productteam.toml` and returns the right one. API keys from environment variables only.
+
+### Doctor (`doctor.py`)
+
+`productteam doctor` checks 8 things: Python version, package version, config validity, `.productteam/` directory, skills (all 8 present), provider + API key, forge queue health, disk space. Prints the thinker/doer note unconditionally. Exit code 1 on critical failures. `--json` for scripting, `--no-network` to skip API checks.
+
+### State (`state.json`)
+
+Written by the Supervisor on every state change. Records pipeline phase, completed stages, current sprint, loop iteration, timestamps. `productteam run` without a concept reads this and resumes. Passed sprints are skipped. `--rebuild` forces full rebuild.
+
 ## CLI Reference
 
 ### `productteam init [DIRECTORY]`
