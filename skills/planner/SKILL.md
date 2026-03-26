@@ -45,9 +45,24 @@ What must exist before this sprint can start? Other packages installed? Specific
 
 Classify as: small (1-3 files, < 200 lines), medium (4-10 files, 200-800 lines), large (10+ files, 800+ lines).
 
-### Step 5: Write the Sprint Contract
+### Step 5: Write the Sprint Contract Files
 
-Output the sprint contract as a YAML file at `.claude/sprints/sprint-NNN.yaml` using this exact schema:
+Use the `write_file` tool to write each sprint contract to disk. Each sprint
+gets its own file. Do NOT write all sprints into a single file. Do NOT write
+a markdown table or prose summary instead of YAML files.
+
+File paths:
+- Sprint 1: `.productteam/sprints/sprint-001.yaml`
+- Sprint 2: `.productteam/sprints/sprint-002.yaml`
+- (continue sequentially)
+
+Use `list_dir` to check `.productteam/sprints/` for existing files before
+writing, to avoid overwriting work in progress.
+
+Each file must be valid YAML matching the schema below. Write each file
+with `write_file` before proceeding to Step 6.
+
+Schema:
 
 ```yaml
 sprint: <number>
@@ -83,9 +98,16 @@ notes: |
   Architectural decisions, rationale for choices, warnings about gotchas.
 ```
 
-### Step 6: Confirm with User
+### Step 6: Confirm or Proceed
 
-Present the sprint contract summary to the user. Ask if the scope, deliverables, and acceptance criteria look right before the Builder starts.
+**If automated context** (no interactive user — pipeline is running headlessly):
+Write all sprint YAML files using `write_file`, then output a summary of
+what was written: how many sprints, titles, scope estimates, and file paths.
+Do not ask for approval. The Orchestrator's approval gate handles human review.
+
+**If interactive context:**
+Present the sprint contract summary to the user. Ask if the scope,
+deliverables, and acceptance criteria look right before the Builder starts.
 
 ## Rules
 
@@ -94,6 +116,6 @@ Present the sprint contract summary to the user. Ask if the scope, deliverables,
 3. **Be specific about file paths.** The Builder shouldn't have to guess where things go.
 4. **Reference existing patterns.** If the codebase already has a convention (e.g., specific framework for CLI, specific library for models), state it as a constraint.
 5. **Don't over-decompose.** A sprint should be completable in one session. If the PRD is too big, propose multiple sprints and build the first one.
-6. **Number sprints sequentially.** Check `.claude/sprints/` for existing sprint files and use the next number.
+6. **Number sprints sequentially.** Use `list_dir` to check `.productteam/sprints/` for existing sprint files and use the next available number. Write each sprint as its own `.yaml` file using `write_file`. Never combine multiple sprints into one file.
 7. **Release sprints MUST include documentation and publishing.** When a sprint produces shippable code, the deliverables MUST include: README updates (test counts, new features, fixes), documentation updates, and any publishing steps. Code without updated docs is not shippable.
 8. **Docs deliverables are testable.** Acceptance criteria for docs include: "README reflects current test count", "Install commands are correct", "No placeholder URLs remain".

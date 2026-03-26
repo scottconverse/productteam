@@ -60,8 +60,8 @@ This is the core design decision. Stages split into two types:
 | Stage | Type | How It Runs |
 |-------|------|-------------|
 | PRD Writer | Thinker | Single LLM call, structured text output |
-| Planner | Thinker | Single LLM call, structured text output |
 | Design Evaluator | Thinker | Single LLM call, structured text output |
+| **Planner** | **Doer** | **Tool-use loop** (writes sprint YAML files to `.productteam/sprints/`) |
 | **Builder** | **Doer** | **Tool-use loop** (read/write files, run commands) |
 | **UI Builder** | **Doer** | **Tool-use loop** (read/write files, run commands) |
 | **Evaluator** | **Doer** | **Tool-use loop** (reads code, runs tests, grades) |
@@ -69,7 +69,7 @@ This is the core design decision. Stages split into two types:
 
 **Thinker stages** support all configured providers (Anthropic, OpenAI, Ollama, Gemini). Single `provider.complete()` call — context in, text artifact out.
 
-**Doer stages** run an agentic tool-use loop with exactly four tools: `read_file`, `write_file`, `run_bash`, `list_dir`. The LLM calls tools, the supervisor executes them, results go back to the LLM, repeat until the agent finishes. The Evaluator uses this to read actual source files and run tests. The Doc Writer uses it to read code before writing documentation.
+**Doer stages** run an agentic tool-use loop with exactly four tools: `read_file`, `write_file`, `run_bash`, `list_dir`. The LLM calls tools, the supervisor executes them, results go back to the LLM, repeat until the agent finishes. The Planner uses this to write sprint YAML files directly to disk. The Evaluator reads source files and runs tests. The Doc Writer reads code before writing documentation.
 
 ## How It Really Works
 
@@ -317,9 +317,14 @@ api_base = ""                   # for openai-compatible servers
 max_loops = 3                   # build-evaluate loop limit
 require_evaluator = true
 require_design_review = true
-stage_timeout_seconds = 120     # thinker stage timeout
-builder_timeout_seconds = 300   # doer stage wall time
-builder_max_tool_calls = 50     # tool call limit per builder run
+stage_timeout_seconds = 300     # thinker stages (PRD Writer, Design Evaluator)
+planner_timeout_seconds = 600   # Planner may write many sprint YAML files
+builder_timeout_seconds = 600   # doer stages (Builder, Evaluator, Doc Writer)
+builder_max_tool_calls = 50     # tool call limit per doer run
+
+# Increase these on slow connections or large products.
+# Claude Sonnet on a complex 8-sprint plan easily takes 5+ minutes.
+# Rule of thumb: builder_timeout_seconds = (expected_files * 30s).
 auto_approve = false            # skip approval gates
 
 [gates]

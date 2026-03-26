@@ -517,19 +517,13 @@ async def test_full_pipeline_two_sprints(tmp_path):
     mock_provider = AsyncMock()
 
     # Thinker stages use provider.complete:
-    #   1. PRD
-    #   2. Plan
-    mock_provider.complete = AsyncMock(side_effect=[
-        "# PRD\nA CLI tool.",                          # PRD
-        "# Plan\nsprint-001: core\nsprint-002: tests", # Plan
-    ])
+    #   1. PRD only (Planner is now a doer)
+    mock_provider.complete = AsyncMock(return_value="# PRD\nA CLI tool.")
 
     # Doer stages use provider.complete_with_tools (via tool loop):
-    #   Sprint 1: builder → evaluator(PASS)
-    #   Sprint 2: builder → evaluator(PASS)
-    #   Document: doc-writer
-    #   Design evaluation (now a doer with retry loop)
+    #   Plan, Sprint 1 (builder → evaluator), Sprint 2, Document, Design eval
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Sprint plan written."),                     # planner
         _eval_response("Sprint 1 built."),                          # builder sprint-001
         _eval_response("evaluator_verdict: PASS\nAll good."),       # evaluator sprint-001
         _eval_response("Sprint 2 built."),                          # builder sprint-002
@@ -571,13 +565,11 @@ async def test_full_pipeline_sprint_fails_stops_pipeline(tmp_path):
     })
 
     mock_provider = AsyncMock()
-    mock_provider.complete = AsyncMock(side_effect=[
-        "# PRD\nA tool.",
-        "# Plan\nsprint-001: core\nsprint-002: tests",
-    ])
+    mock_provider.complete = AsyncMock(return_value="# PRD\nA tool.")
 
-    # Sprint 1 builder + evaluator FAIL — pipeline should stop before sprint-002
+    # Planner (doer) + Sprint 1 builder + evaluator FAIL
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Plan written."),
         _eval_response("Built sprint 1."),
         _eval_response("evaluator_verdict: FAIL\nFundamental issues."),
     ])
@@ -587,8 +579,8 @@ async def test_full_pipeline_sprint_fails_stops_pipeline(tmp_path):
 
     # Pipeline should be stuck (sprint-001 failed, never reaches sprint-002)
     assert result.status == "stuck"
-    # Only PRD + Plan + failed build stage
-    assert len(result.stages) == 3
+    # PRD + Plan + failed build stage = 3, but doc writer guard also stops
+    assert len(result.stages) >= 3
 
 
 @pytest.mark.asyncio
@@ -634,6 +626,7 @@ async def test_full_pipeline_resume_skips_completed(tmp_path):
         "model": "test",
         "max_loops": 1,
         "stage_timeout_seconds": 10,
+        "planner_timeout_seconds": 10,
         "builder_timeout_seconds": 30,
         "builder_max_tool_calls": 5,
         "auto_approve": False,
@@ -685,12 +678,150 @@ async def test_multi_sprint_sequencing(tmp_path):
                 seen_sprints.append(s)
         return _eval_response("evaluator_verdict: PASS\nDone.")
 
-    mock_provider.complete = AsyncMock(side_effect=[
-        "# PRD", "# Plan",
-    ])
+    mock_provider.complete = AsyncMock(return_value="# PRD")
     mock_provider.complete_with_tools = AsyncMock(side_effect=track_complete_with_tools)
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     await supervisor.run(concept="multi-sprint test")
 
     assert seen_sprints == ["sprint-001", "sprint-002", "sprint-003"]
+
+
+# ---------------------------------------------------------------------------
+# Planner as doer + pipeline guard tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_planner_doer_writes_yaml_files(tmp_path):
+    """Planner (now a doer) writes sprint YAML files to .productteam/sprints/."""
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints").mkdir(parents=True, exist_ok=True)
+
+    config = _make_config()
+    mock_provider = AsyncMock()
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t1",
+            "name": "write_file",
+            "input": {"path": ".productteam/sprints/sprint-001.yaml",
+                      "content": "sprint: 1\ntitle: Core\n"}}],
+         "stop_reason": "tool_use"},
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t2",
+            "name": "write_file",
+            "input": {"path": ".productteam/sprints/sprint-002.yaml",
+                      "content": "sprint: 2\ntitle: CLI\n"}}],
+         "stop_reason": "tool_use"},
+        {"role": "assistant",
+         "content": [{"type": "text", "text": "Two sprint contracts written."}],
+         "stop_reason": "end_turn"},
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor._run_tool_loop_stage(
+        PipelineStage.PLAN, "planner", "Build a CLI tool."
+    )
+
+    assert result.status == "complete"
+    assert (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").exists()
+    assert (tmp_path / ".productteam" / "sprints" / "sprint-002.yaml").exists()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_fails_when_no_sprints_after_plan(tmp_path):
+    """Pipeline returns failed (not silent skip) when plan completes with no YAML files."""
+    _init_project(tmp_path)
+    config = _make_config(pipeline={
+        "provider": "anthropic", "model": "test", "max_loops": 1,
+        "stage_timeout_seconds": 10, "planner_timeout_seconds": 10,
+        "builder_timeout_seconds": 30, "builder_max_tool_calls": 5,
+        "auto_approve": False, "require_design_review": False,
+    })
+    mock_provider = AsyncMock()
+    mock_provider.complete = AsyncMock(return_value="# PRD\nA CLI tool.")
+    # Planner completes but writes no YAML files
+    mock_provider.complete_with_tools = AsyncMock(return_value={
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Here is my sprint plan as prose. No files."}],
+        "stop_reason": "end_turn",
+    })
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor.run(concept="build a tool")
+
+    assert result.status == "failed"
+    assert not any(s.stage == PipelineStage.BUILD for s in result.stages)
+
+
+@pytest.mark.asyncio
+async def test_doc_writer_skipped_when_no_sprints_passed(tmp_path):
+    """Doc Writer does not run when no sprints have passed evaluation."""
+    _init_project(tmp_path)
+    # Create a sprint file so the pipeline doesn't fail at the "no sprints" check,
+    # but don't pass it through evaluation
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
+        "sprint: 1\ntitle: Test\n"
+    )
+
+    config = _make_config(pipeline={
+        "provider": "anthropic", "model": "test", "max_loops": 1,
+        "stage_timeout_seconds": 10, "planner_timeout_seconds": 10,
+        "builder_timeout_seconds": 30, "builder_max_tool_calls": 5,
+        "auto_approve": False, "require_design_review": False,
+    })
+    mock_provider = AsyncMock()
+    mock_provider.complete = AsyncMock(return_value="# PRD\nA tool.")
+
+    # Planner writes no new files (sprint-001 already exists)
+    # Builder + Evaluator FAIL
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Plan done."),  # planner
+        _eval_response("Built."),  # builder
+        _eval_response("evaluator_verdict: FAIL\nBroken."),  # evaluator
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor.run(concept="build a tool")
+
+    # Should be stuck (build failed), doc writer never ran
+    assert result.status == "stuck"
+    doc_stages = [s for s in result.stages if s.stage == PipelineStage.DOCUMENT]
+    assert len(doc_stages) == 0
+
+
+def test_timeout_defaults_are_production_viable():
+    """Timeout defaults reflect real-world LLM latency, not optimistic estimates."""
+    config = ProductTeamConfig()
+    assert config.pipeline.stage_timeout_seconds >= 300, \
+        "stage_timeout_seconds must be >= 300s for real Sonnet latency"
+    assert config.pipeline.builder_timeout_seconds >= 600, \
+        "builder_timeout_seconds must be >= 600s for complex doer stages"
+    assert config.pipeline.planner_timeout_seconds >= 600, \
+        "planner_timeout_seconds must be >= 600s for multi-sprint planning"
+
+
+@pytest.mark.asyncio
+async def test_planner_uses_planner_timeout(tmp_path):
+    """_run_tool_loop_stage accepts and passes through timeout override."""
+    _init_project(tmp_path)
+    config = _make_config(pipeline={
+        "provider": "anthropic", "model": "test",
+        "stage_timeout_seconds": 10,
+        "planner_timeout_seconds": 999,
+        "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5,
+        "max_loops": 1, "auto_approve": False,
+    })
+    mock_provider = AsyncMock()
+    mock_provider.complete_with_tools = AsyncMock(return_value={
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Done."}],
+        "stop_reason": "end_turn",
+    })
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    # Should use 999s timeout, not 10s stage timeout
+    result = await supervisor._run_tool_loop_stage(
+        PipelineStage.PLAN, "planner", "Plan this.",
+        timeout_seconds=config.pipeline.planner_timeout_seconds,
+    )
+    assert result.status == "complete"

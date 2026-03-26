@@ -25,12 +25,29 @@ Read the user's product concept. It might be a sentence ("a tool that diffs prom
 
 ### Phase 2: Clarifying Questions
 
-Ask the user targeted questions. NOT open-ended brainstorming — specific questions with suggested defaults. For each question, suggest a sensible default based on the product type so the user can say "yes, go" with minimal friction.
+**First: detect whether you are in an interactive or automated context.**
+
+You are in an **automated context** if:
+- The input is a product concept with no prior conversation history
+- There is no back-and-forth dialogue visible in the conversation
+- The message reads like a brief or document, not a chat message
+
+You are in an **interactive context** if:
+- There is visible conversation history showing a human responding
+- The user has explicitly asked questions or given follow-up instructions
+
+**If automated context:** Skip this phase entirely. Apply all defaults
+below and proceed directly to Phase 3 (Research) then Phase 4 (Write
+the PRD). Do not ask questions. Do not wait for input. A PRD written
+from sensible defaults is better than a stalled pipeline.
+
+**If interactive context:** Ask the user targeted questions — NOT
+open-ended brainstorming. Specific questions with suggested defaults,
+so the user can say "yes, go" with minimal friction.
 
 Standard questions to consider (skip any the user already answered):
-
-- "Who is the target user? (e.g., AI product teams, solo developers, DevOps engineers)"
-- "What's the tech stack? Python CLI is the default for developer tools — should I go with that?"
+- "Who is the target user? (e.g., AI product teams, solo developers)"
+- "What's the tech stack? Python CLI is the default — should I go with that?"
 - "What's the deployment model? pip install from PyPI? npm? Docker?"
 - "What's the scope boundary? What should this explicitly NOT do?"
 - "Is there a UI, or is this CLI/API only?"
@@ -59,7 +76,10 @@ Be specific throughout:
 
 ### Phase 5: Review with User
 
-Present a summary of the PRD to the user covering:
+**If automated context:** Skip the review request. Write the PRD and
+proceed directly to Phase 6 (Handoff). Do not ask for approval.
+
+**If interactive context:** Present a summary of the PRD covering:
 - Product name and one-line description
 - Target users
 - Core features (bulleted list)
@@ -81,7 +101,7 @@ Once the user approves, tell the Orchestrator the PRD is ready for planning. The
 This is the exact format the Planner expects. Every PRD must follow this structure.
 
 ```markdown
-# PRD: [Product Name]
+# PRD: [Product Name — use exact name from concept, or placeholder if none given]
 
 ## Executive Summary
 [2-3 sentences: what is this product and why does it matter?]
@@ -179,3 +199,5 @@ command2 [args] [options]    # description
 6. **Include a deliverables checklist.** This tells the Orchestrator what "done" looks like beyond just working code.
 7. **Write for a Builder who has never seen the product concept.** The PRD is the complete context. If it is not in the PRD, it will not get built.
 8. **Name check everything.** Package names, CLI command names, repo names — verify availability before committing to a name in the PRD.
+9. **In automated contexts, apply defaults and proceed without asking.** If there is no prior conversation indicating a human is present and responding, write the PRD directly from the concept plus sensible defaults. Do not ask questions that will never be answered.
+10. **Do not invent product names.** If the concept includes a product name, use it exactly. If the concept does not include a product name, use the placeholder `[PRODUCT NAME]` throughout the PRD and note at the top: "Product name not specified in concept — using placeholder. Replace before shipping." Do not coin a creative name. That decision belongs to the human, not the pipeline.

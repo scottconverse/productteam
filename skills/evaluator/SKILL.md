@@ -25,7 +25,7 @@ The Builder saying "ready for review" means they believe it's ready. Your job is
 
 ### Step 1: Read the Sprint Contract
 
-Read `.claude/sprints/sprint-NNN.yaml`. This is your rubric. Every acceptance criterion is a checkbox you must verify with evidence.
+Read `.productteam/sprints/sprint-NNN.yaml`. This is your rubric. Every acceptance criterion is a checkbox you must verify with evidence.
 
 ### Step 2: Read the Builder's Output
 
@@ -65,7 +65,7 @@ Go beyond the acceptance criteria. Try to break things:
 
 ### Step 6: Write the Evaluation Report
 
-Output the evaluation report at `.claude/evaluations/eval-NNN.yaml` using this exact schema:
+Output the evaluation report at `.productteam/evaluations/eval-NNN.yaml` using this exact schema:
 
 ```yaml
 sprint: <number>

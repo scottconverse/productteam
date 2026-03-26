@@ -16,6 +16,7 @@ class PipelineConfig(BaseModel):
     require_evaluator: bool = True
     require_design_review: bool = True
     stage_timeout_seconds: int = 300
+    planner_timeout_seconds: int = 600
     builder_timeout_seconds: int = 600
     builder_max_tool_calls: int = 50
     auto_approve: bool = False

@@ -206,11 +206,12 @@ class Supervisor:
                 if not await self._gate("PRD Approval", result.artifact_path):
                     return SupervisorResult(concept=concept, stages=stages, status="partial")
 
-        # 2. Plan
+        # 2. Plan (doer — writes sprint YAML files to .productteam/sprints/)
         if not _is_stage_complete(self.state, "plan") or rebuild:
             prd_content = self._read_artifact("prd")
-            result = await self._run_thinker_stage(
-                PipelineStage.PLAN, "planner", prd_content
+            result = await self._run_tool_loop_stage(
+                PipelineStage.PLAN, "planner", prd_content,
+                timeout_seconds=self.config.pipeline.planner_timeout_seconds,
             )
             stages.append(result)
             if result.status != "complete":
@@ -223,6 +224,17 @@ class Supervisor:
 
         # 3. Build + Evaluate loop
         sprints = self._find_sprints()
+        if not sprints:
+            if _is_stage_complete(self.state, "plan"):
+                console.print(
+                    "[bold red]Pipeline error:[/bold red] Plan stage completed but no sprint "
+                    "contract YAML files were found in .productteam/sprints/. "
+                    "The Planner did not write sprint files to disk. "
+                    "Check .productteam/plan.md for what the Planner produced."
+                )
+                return SupervisorResult(concept=concept, stages=stages, status="failed")
+            else:
+                console.print("[yellow]No sprints found and plan not complete — skipping build.[/yellow]")
         for sprint_name in sprints:
             if _is_sprint_passed(self.state, sprint_name) and not rebuild:
                 console.print(f"[dim]{sprint_name}: already passed, skipping[/dim]")
@@ -232,6 +244,14 @@ class Supervisor:
             stages.append(result)
             if result.status not in ("complete", "skipped"):
                 return SupervisorResult(concept=concept, stages=stages, status="stuck")
+
+        # Only run Doc Writer if at least one sprint passed
+        passed_sprints = [s for s in sprints if _is_sprint_passed(self.state, s)]
+        if not passed_sprints:
+            console.print(
+                "[yellow]Skipping documentation — no sprints have passed evaluation.[/yellow]"
+            )
+            return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
         # 4. Document
         if not _is_stage_complete(self.state, "document") or rebuild:
@@ -286,7 +306,10 @@ class Supervisor:
             return await self._run_thinker_stage(stage, "prd-writer", concept)
         elif stage == PipelineStage.PLAN:
             prd_content = self._read_artifact("prd")
-            return await self._run_thinker_stage(stage, "planner", prd_content)
+            return await self._run_tool_loop_stage(
+                stage, "planner", prd_content,
+                timeout_seconds=self.config.pipeline.planner_timeout_seconds,
+            )
         elif stage == PipelineStage.BUILD:
             sprints = self._find_sprints()
             sprint_name = sprint or (sprints[0] if sprints else "sprint-001")
@@ -364,6 +387,7 @@ class Supervisor:
         stage: PipelineStage,
         skill_name: str,
         context: str,
+        timeout_seconds: float | None = None,
     ) -> StageResult:
         """Run a doer stage (tool loop with file access)."""
         console.print(f"\n[bold cyan]Running: {stage.value} (tool loop)[/bold cyan]")
@@ -377,13 +401,15 @@ class Supervisor:
         self.state.setdefault("stages", {})[stage.value] = {"status": "running"}
         _save_state(self.project_dir, self.state)
 
+        effective_timeout = timeout_seconds or self.config.pipeline.builder_timeout_seconds
+
         result = await run_tool_loop(
             provider=self.provider,
             system_prompt=system_prompt,
             initial_user_message=context,
             project_dir=self.project_dir,
             max_tool_calls=self.config.pipeline.builder_max_tool_calls,
-            timeout_seconds=self.config.pipeline.builder_timeout_seconds,
+            timeout_seconds=effective_timeout,
         )
 
         if result.status in ("stuck", "max_calls"):
