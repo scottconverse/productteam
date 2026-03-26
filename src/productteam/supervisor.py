@@ -69,11 +69,21 @@ class SupervisorResult:
         self.status = status  # "complete" | "stuck" | "failed" | "partial"
 
 
+SCHEMA_VERSION = 1
+
+
 def _load_state(project_dir: Path) -> dict:
     """Load state.json or return default state."""
     state_path = project_dir / ".productteam" / "state.json"
     if state_path.exists():
-        return json.loads(state_path.read_text(encoding="utf-8"))
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        version = state.get("schema_version", 0)
+        if version != SCHEMA_VERSION:
+            raise ValueError(
+                f"state.json schema version {version} is not supported (expected {SCHEMA_VERSION}). "
+                "Delete .productteam/state.json to start fresh."
+            )
+        return state
     return {
         "schema_version": 1,
         "pipeline_phase": "planning",
@@ -192,8 +202,9 @@ class Supervisor:
                 return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
             # PRD gate
-            if not await self._gate("PRD Approval", result.artifact_path):
-                return SupervisorResult(concept=concept, stages=stages, status="partial")
+            if self.config.gates.prd_approval:
+                if not await self._gate("PRD Approval", result.artifact_path):
+                    return SupervisorResult(concept=concept, stages=stages, status="partial")
 
         # 2. Plan
         if not _is_stage_complete(self.state, "plan") or rebuild:
@@ -206,8 +217,9 @@ class Supervisor:
                 return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
             # Sprint plan gate
-            if not await self._gate("Sprint Plan Approval", result.artifact_path):
-                return SupervisorResult(concept=concept, stages=stages, status="partial")
+            if self.config.gates.sprint_approval:
+                if not await self._gate("Sprint Plan Approval", result.artifact_path):
+                    return SupervisorResult(concept=concept, stages=stages, status="partial")
 
         # 3. Build + Evaluate loop
         sprints = self._find_sprints()
@@ -254,8 +266,9 @@ class Supervisor:
                     return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
         # 5. Ship gate
-        if not await self._gate("Ship Approval", ""):
-            return SupervisorResult(concept=concept, stages=stages, status="partial")
+        if self.config.gates.ship_approval:
+            if not await self._gate("Ship Approval", ""):
+                return SupervisorResult(concept=concept, stages=stages, status="partial")
 
         self.state["pipeline_phase"] = "shipping"
         _save_state(self.project_dir, self.state)
@@ -370,7 +383,7 @@ class Supervisor:
             initial_user_message=context,
             project_dir=self.project_dir,
             max_tool_calls=self.config.pipeline.builder_max_tool_calls,
-            timeout_seconds=self.config.pipeline.stage_timeout_seconds,
+            timeout_seconds=self.config.pipeline.builder_timeout_seconds,
         )
 
         if result.status in ("stuck", "max_calls"):
@@ -516,7 +529,7 @@ class Supervisor:
                 initial_user_message=eval_prompt,
                 project_dir=self.project_dir,
                 max_tool_calls=self.config.pipeline.builder_max_tool_calls,
-                timeout_seconds=self.config.pipeline.stage_timeout_seconds,
+                timeout_seconds=self.config.pipeline.builder_timeout_seconds,
             )
 
             if eval_result.status == "stuck":
@@ -604,7 +617,8 @@ class Supervisor:
             elif choice == "edit":
                 if artifact_path:
                     editor = os.environ.get("EDITOR", "notepad" if os.name == "nt" else "vi")
-                    os.system(f"{editor} {artifact_path}")
+                    proc = await asyncio.create_subprocess_exec(editor, artifact_path)
+                    await proc.wait()
                     console.print("[dim]Re-read artifact after editing[/dim]")
                 else:
                     console.print("[dim]No artifact to edit[/dim]")
@@ -632,11 +646,14 @@ class Supervisor:
         """Read a previously written artifact."""
         stage_info = self.state.get("stages", {}).get(stage_name, {})
         artifact_rel = stage_info.get("artifact", "")
-        if artifact_rel:
-            artifact_path = self.project_dir / artifact_rel
-            if artifact_path.exists():
-                return artifact_path.read_text(encoding="utf-8")
-        return ""
+        if not artifact_rel:
+            console.print(f"[yellow]Warning: no artifact path recorded for stage '{stage_name}'[/yellow]")
+            return ""
+        artifact_path = self.project_dir / artifact_rel
+        if not artifact_path.exists():
+            console.print(f"[yellow]Warning: artifact file missing: {artifact_path}[/yellow]")
+            return ""
+        return artifact_path.read_text(encoding="utf-8")
 
     def _find_sprints(self) -> list[str]:
         """Find all sprint contract files."""

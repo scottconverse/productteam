@@ -47,6 +47,7 @@ def init_project(target_dir: Path, force: bool = False) -> dict[str, bool]:
         "created_productteam_dir": False,
         "created_sprints_dir": False,
         "created_evaluations_dir": False,
+        "created_handoffs_dir": False,
         "copied_skills": False,
         "created_config": False,
     }
@@ -68,6 +69,12 @@ def init_project(target_dir: Path, force: bool = False) -> dict[str, bool]:
     if not evals_dir.exists():
         evals_dir.mkdir(parents=True)
         result["created_evaluations_dir"] = True
+
+    # .productteam/handoffs/
+    handoffs_dir = pt_dir / "handoffs"
+    if not handoffs_dir.exists():
+        handoffs_dir.mkdir(parents=True)
+        result["created_handoffs_dir"] = True
 
     # Copy skills into .claude/skills/
     skills_dest = target_dir / ".claude" / "skills"

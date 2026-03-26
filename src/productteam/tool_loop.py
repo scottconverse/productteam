@@ -103,6 +103,23 @@ def _validate_path(path_str: str, project_dir: Path) -> Path | str:
     return resolved
 
 
+# Patterns that indicate environment variable dumping
+ENV_DUMP_PATTERNS = [
+    "printenv", "/proc/self/environ", "/proc/environ",
+    "export | ", "export|",
+    "set | grep", "set |grep",
+]
+
+# Patterns where "env" is used as a command (not as part of a word like "poetry env")
+ENV_CMD_PATTERNS = [" env | ", " env|"]
+
+# Credential-adjacent keywords
+CRED_KEYWORDS = ["api_key", "token", "secret", "password", "credential"]
+
+# Commands that read environment variables (used with CRED_KEYWORDS)
+ENV_READ_CMDS = ["echo $", "echo ${", "printenv", "os.environ"]
+
+
 def _validate_command(command: str) -> str | None:
     """Check if a command tries to access credentials or forbidden paths.
 
@@ -115,23 +132,19 @@ def _validate_command(command: str) -> str | None:
             return f"Command accesses forbidden path: {forbidden}"
 
     # Block commands that dump environment variables (credential leakage)
-    _lower = command.lower()
-    _ENV_DUMP_PATTERNS = [
-        "printenv", "/proc/self/environ", "/proc/environ",
-        "env | ", "env|", "export | ", "export|",
-        "set | grep", "set |grep",
-    ]
-    for pattern in _ENV_DUMP_PATTERNS:
-        if pattern in _lower:
+    lower = command.lower()
+    for pattern in ENV_DUMP_PATTERNS:
+        if pattern in lower:
             return "Command attempts to read environment variables"
 
-    # Block credential-adjacent keywords in env access
-    _CRED_KEYWORDS = ["api_key", "token", "secret", "password", "credential"]
-    if any(kw in _lower for kw in _CRED_KEYWORDS):
-        # Allow if the keyword is in a file path within the project (e.g. test_api_key.py)
-        # but block if combined with env-reading commands
-        _ENV_CMDS = ["echo $", "echo ${", "printenv", "env", "export", "os.environ"]
-        if any(cmd in _lower for cmd in _ENV_CMDS):
+    # "env" as a standalone command (at start or after space, not inside words)
+    for pattern in ENV_CMD_PATTERNS:
+        if pattern in lower or lower.startswith(pattern.lstrip()):
+            return "Command attempts to read environment variables"
+
+    # Block credential-adjacent keywords combined with env-reading commands
+    if any(kw in lower for kw in CRED_KEYWORDS):
+        if any(cmd in lower for cmd in ENV_READ_CMDS):
             return "Command attempts to read credential environment variables"
 
     return None

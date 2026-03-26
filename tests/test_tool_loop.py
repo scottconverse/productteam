@@ -109,6 +109,11 @@ def test_validate_command_cred_keyword_in_test_file_allowed():
     assert _validate_command("python test_api_key.py") is None
 
 
+def test_validate_command_poetry_env_allowed():
+    """poetry env use is a legitimate command and should not be blocked."""
+    assert _validate_command("poetry env use python3.11") is None
+
+
 def test_validate_command_echo_env_var_blocked():
     """echo $API_KEY is blocked."""
     result = _validate_command("echo $API_KEY")
