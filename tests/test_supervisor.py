@@ -342,3 +342,225 @@ def test_resume_skips_completed_stages(tmp_path):
     _save_state(tmp_path, state)
     loaded = _load_state(tmp_path)
     assert loaded["stages"]["prd"]["status"] == "complete"
+
+
+# ---------------------------------------------------------------------------
+# Full pipeline integration tests
+# ---------------------------------------------------------------------------
+
+
+def _init_multi_sprint_project(tmp_path: Path) -> None:
+    """Set up a project with two sprint contracts and all skills."""
+    _init_project(tmp_path)
+    # Also add evaluator-design and doc-writer skills for the full pipeline
+    for extra in ["evaluator-design"]:
+        skill_dir = tmp_path / ".claude" / "skills" / extra
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        (skill_dir / "SKILL.md").write_text(f"# {extra}\nYou are a {extra}.")
+
+    sprints_dir = tmp_path / ".productteam" / "sprints"
+    sprints_dir.mkdir(parents=True, exist_ok=True)
+    (sprints_dir / "sprint-001.yaml").write_text(
+        "sprint: 1\ntitle: Core feature\nacceptance_criteria:\n  - Feature works\n"
+    )
+    (sprints_dir / "sprint-002.yaml").write_text(
+        "sprint: 2\ntitle: Tests\nacceptance_criteria:\n  - Tests pass\n"
+    )
+
+
+@pytest.mark.asyncio
+async def test_full_pipeline_two_sprints(tmp_path):
+    """Full Supervisor.run() with two sprints, all stages, auto-approve."""
+    _init_multi_sprint_project(tmp_path)
+
+    config = _make_config(pipeline={
+        "provider": "anthropic",
+        "model": "test",
+        "max_loops": 2,
+        "stage_timeout_seconds": 10,
+        "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5,
+        "auto_approve": False,
+        "require_design_review": True,
+    })
+
+    mock_provider = AsyncMock()
+
+    # Thinker stages use provider.complete:
+    #   1. PRD
+    #   2. Plan
+    #   3. Design evaluation
+    mock_provider.complete = AsyncMock(side_effect=[
+        "# PRD\nA CLI tool.",                          # PRD
+        "# Plan\nsprint-001: core\nsprint-002: tests", # Plan
+        "Design looks good. PASS",                      # Design eval
+    ])
+
+    # Doer stages use provider.complete_with_tools (via tool loop):
+    #   Sprint 1: builder → evaluator(PASS)
+    #   Sprint 2: builder → evaluator(PASS)
+    #   Document: doc-writer
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Sprint 1 built."),                          # builder sprint-001
+        _eval_response("evaluator_verdict: PASS\nAll good."),       # evaluator sprint-001
+        _eval_response("Sprint 2 built."),                          # builder sprint-002
+        _eval_response("evaluator_verdict: PASS\nTests pass."),     # evaluator sprint-002
+        _eval_response("# Documentation\nAll docs written."),       # doc-writer
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor.run(concept="test CLI tool")
+
+    assert result.status == "complete"
+    assert result.concept == "test CLI tool"
+    # PRD + Plan + 2x build-eval + document + design-eval = 6 stages
+    assert len(result.stages) == 6
+
+    # Verify state was saved correctly
+    state = _load_state(tmp_path)
+    assert state["pipeline_phase"] == "shipping"
+    assert state["stages"]["prd"]["status"] == "complete"
+    assert state["stages"]["plan"]["status"] == "complete"
+    assert state["stages"]["document"]["status"] == "complete"
+
+
+@pytest.mark.asyncio
+async def test_full_pipeline_sprint_fails_stops_pipeline(tmp_path):
+    """Pipeline stops when a sprint's evaluator returns FAIL."""
+    _init_multi_sprint_project(tmp_path)
+
+    config = _make_config(pipeline={
+        "provider": "anthropic",
+        "model": "test",
+        "max_loops": 1,
+        "stage_timeout_seconds": 10,
+        "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5,
+        "auto_approve": False,
+        "require_design_review": False,
+    })
+
+    mock_provider = AsyncMock()
+    mock_provider.complete = AsyncMock(side_effect=[
+        "# PRD\nA tool.",
+        "# Plan\nsprint-001: core\nsprint-002: tests",
+    ])
+
+    # Sprint 1 builder + evaluator FAIL — pipeline should stop before sprint-002
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Built sprint 1."),
+        _eval_response("evaluator_verdict: FAIL\nFundamental issues."),
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor.run(concept="failing project")
+
+    # Pipeline should be stuck (sprint-001 failed, never reaches sprint-002)
+    assert result.status == "stuck"
+    # Only PRD + Plan + failed build stage
+    assert len(result.stages) == 3
+
+
+@pytest.mark.asyncio
+async def test_full_pipeline_no_concept_fails(tmp_path):
+    """Pipeline fails immediately when no concept is provided and none in state."""
+    _init_project(tmp_path)
+    config = _make_config()
+    mock_provider = AsyncMock()
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor.run(concept="")
+
+    assert result.status == "failed"
+    assert result.stages == []
+
+
+@pytest.mark.asyncio
+async def test_full_pipeline_resume_skips_completed(tmp_path):
+    """Pipeline resumes and skips already-completed stages."""
+    _init_multi_sprint_project(tmp_path)
+
+    # Pre-populate state: PRD and Plan already complete
+    prd_dir = tmp_path / ".productteam" / "prds"
+    prd_dir.mkdir(parents=True, exist_ok=True)
+    (prd_dir / "prd-v1.md").write_text("# PRD\nDone.")
+
+    plan_path = tmp_path / ".productteam" / "plan.md"
+    plan_path.write_text("# Plan\nDone.")
+
+    state = {
+        "schema_version": 1,
+        "concept": "resumed project",
+        "pipeline_phase": "building",
+        "stages": {
+            "prd": {"status": "complete", "artifact": ".productteam/prds/prd-v1.md"},
+            "plan": {"status": "complete", "artifact": ".productteam/plan.md"},
+        },
+    }
+    _save_state(tmp_path, state)
+
+    config = _make_config(pipeline={
+        "provider": "anthropic",
+        "model": "test",
+        "max_loops": 1,
+        "stage_timeout_seconds": 10,
+        "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5,
+        "auto_approve": False,
+        "require_design_review": False,
+    })
+
+    mock_provider = AsyncMock()
+    # PRD and Plan should NOT be called — only build/eval + document
+    mock_provider.complete = AsyncMock()  # should not be called
+
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Sprint 1 built."),
+        _eval_response("evaluator_verdict: PASS\nGood."),
+        _eval_response("Sprint 2 built."),
+        _eval_response("evaluator_verdict: PASS\nGood."),
+        _eval_response("# Docs\nWritten."),
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor.run()
+
+    assert result.status == "complete"
+    # PRD and Plan should not have been called via provider.complete
+    mock_provider.complete.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_multi_sprint_sequencing(tmp_path):
+    """Sprints are processed in alphabetical order."""
+    _init_project(tmp_path)
+    sprints_dir = tmp_path / ".productteam" / "sprints"
+    sprints_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create sprints out of order — should still be processed alphabetically
+    (sprints_dir / "sprint-003.yaml").write_text("sprint: 3\ntitle: Third\n")
+    (sprints_dir / "sprint-001.yaml").write_text("sprint: 1\ntitle: First\n")
+    (sprints_dir / "sprint-002.yaml").write_text("sprint: 2\ntitle: Second\n")
+
+    config = _make_config()
+    mock_provider = AsyncMock()
+
+    # Track which sprint contracts were seen
+    seen_sprints = []
+
+    async def track_complete_with_tools(system, messages, tools, **kw):
+        user_msg = messages[0]["content"] if messages else ""
+        for s in ["sprint-001", "sprint-002", "sprint-003"]:
+            if s in user_msg and s not in seen_sprints:
+                seen_sprints.append(s)
+        return _eval_response("evaluator_verdict: PASS\nDone.")
+
+    mock_provider.complete = AsyncMock(side_effect=[
+        "# PRD", "# Plan",
+    ])
+    mock_provider.complete_with_tools = AsyncMock(side_effect=track_complete_with_tools)
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    await supervisor.run(concept="multi-sprint test")
+
+    assert seen_sprints == ["sprint-001", "sprint-002", "sprint-003"]
