@@ -1,6 +1,6 @@
-"""Tool-use loop for Builder and UI Builder stages.
+"""Tool-use loop for doer stages (Builder, Evaluator, Doc Writer).
 
-This module implements the agentic loop that lets builder agents
+This module implements the agentic loop that lets doer agents
 read files, write code, run commands, and react to results.
 Four tools only: read_file, write_file, run_bash, list_dir.
 """

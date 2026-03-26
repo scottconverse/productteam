@@ -221,9 +221,9 @@ class Supervisor:
 
         # 4. Document
         if not _is_stage_complete(self.state, "document") or rebuild:
-            result = await self._run_thinker_stage(
+            result = await self._run_tool_loop_stage(
                 PipelineStage.DOCUMENT, "doc-writer",
-                f"Write documentation for the project. Concept: {concept}"
+                f"Write documentation for the project. Concept: {concept}",
             )
             stages.append(result)
 
@@ -266,14 +266,14 @@ class Supervisor:
         elif stage == PipelineStage.EVALUATE:
             sprints = self._find_sprints()
             sprint_name = sprint or (sprints[-1] if sprints else "sprint-001")
-            return await self._run_thinker_stage(
+            return await self._run_tool_loop_stage(
                 stage, "evaluator",
-                f"Evaluate sprint {sprint_name}"
+                f"Evaluate sprint {sprint_name}",
             )
         elif stage == PipelineStage.DOCUMENT:
-            return await self._run_thinker_stage(
+            return await self._run_tool_loop_stage(
                 stage, "doc-writer",
-                f"Write documentation. Concept: {concept}"
+                f"Write documentation for the project. Concept: {concept}",
             )
         else:
             return StageResult(stage=stage, status="skipped")
@@ -329,6 +329,60 @@ class Supervisor:
             status="complete",
             artifact_path=artifact_path,
             raw_response=response,
+        )
+
+    async def _run_tool_loop_stage(
+        self,
+        stage: PipelineStage,
+        skill_name: str,
+        context: str,
+    ) -> StageResult:
+        """Run a doer stage (tool loop with file access)."""
+        console.print(f"\n[bold cyan]Running: {stage.value} (tool loop)[/bold cyan]")
+
+        try:
+            system_prompt = _load_skill(self.project_dir, skill_name)
+        except FileNotFoundError as e:
+            return StageResult(stage=stage, status="failed", error=str(e))
+
+        self.state["pipeline_phase"] = stage.value
+        self.state.setdefault("stages", {})[stage.value] = {"status": "running"}
+        _save_state(self.project_dir, self.state)
+
+        result = await run_tool_loop(
+            provider=self.provider,
+            system_prompt=system_prompt,
+            initial_user_message=context,
+            project_dir=self.project_dir,
+            max_tool_calls=self.config.pipeline.builder_max_tool_calls,
+            timeout_seconds=self.config.pipeline.stage_timeout_seconds,
+        )
+
+        if result.status in ("stuck", "max_calls"):
+            self.state["stages"][stage.value] = {"status": "stuck"}
+            _save_state(self.project_dir, self.state)
+            console.print(f"[red]Stage {stage.value} stuck: {result.final_text}[/red]")
+            return StageResult(
+                stage=stage,
+                status="stuck",
+                error=result.final_text,
+            )
+
+        # Write artifact
+        artifact_path = self._write_artifact(stage, result.final_text)
+
+        self.state["stages"][stage.value] = {
+            "status": "complete",
+            "artifact": artifact_path,
+        }
+        _save_state(self.project_dir, self.state)
+
+        console.print(f"[green]Stage {stage.value} complete[/green]")
+        return StageResult(
+            stage=stage,
+            status="complete",
+            artifact_path=artifact_path,
+            raw_response=result.final_text,
         )
 
     async def _build_evaluate_loop(self, sprint_name: str) -> StageResult:
@@ -430,20 +484,20 @@ class Supervisor:
                 f"Builder output:\n{build_result.final_text}"
             )
 
-            try:
-                eval_response = await asyncio.wait_for(
-                    self.provider.complete(
-                        system=eval_system,
-                        messages=[{"role": "user", "content": eval_prompt}],
-                    ),
-                    timeout=self.config.pipeline.stage_timeout_seconds,
-                )
-            except asyncio.TimeoutError:
-                console.print("  [red]Evaluator timed out[/red]")
+            eval_result = await run_tool_loop(
+                provider=self.provider,
+                system_prompt=eval_system,
+                initial_user_message=eval_prompt,
+                project_dir=self.project_dir,
+                max_tool_calls=self.config.pipeline.builder_max_tool_calls,
+                timeout_seconds=self.config.pipeline.stage_timeout_seconds,
+            )
+
+            if eval_result.status == "stuck":
+                console.print(f"  [red]Evaluator stuck: {eval_result.final_text}[/red]")
                 continue
-            except Exception as e:
-                console.print(f"  [red]Evaluator error: {e}[/red]")
-                continue
+
+            eval_response = eval_result.final_text
 
             # Write evaluation
             eval_path = (
