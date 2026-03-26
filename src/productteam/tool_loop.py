@@ -7,6 +7,7 @@ Four tools only: read_file, write_file, run_bash, list_dir.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import subprocess
@@ -219,6 +220,7 @@ async def run_tool_loop(
     initial_user_message: str,
     project_dir: Path,
     max_tool_calls: int = 50,
+    timeout_seconds: float | None = None,
 ) -> ToolLoopResult:
     """Run the builder tool-use loop.
 
@@ -234,10 +236,41 @@ async def run_tool_loop(
         initial_user_message: The stage prompt with context.
         project_dir: Project directory for tool execution.
         max_tool_calls: Maximum tool calls before marking stuck.
+        timeout_seconds: Wall-clock timeout for the entire loop. None = no limit.
 
     Returns:
         ToolLoopResult with final text, call count, and status.
     """
+    if timeout_seconds is not None:
+        try:
+            return await asyncio.wait_for(
+                _run_tool_loop_inner(
+                    provider, system_prompt, initial_user_message,
+                    project_dir, max_tool_calls,
+                ),
+                timeout=timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            return ToolLoopResult(
+                final_text=f"Builder timed out after {timeout_seconds}s",
+                tool_call_count=0,
+                status="stuck",
+                messages=[],
+            )
+    return await _run_tool_loop_inner(
+        provider, system_prompt, initial_user_message,
+        project_dir, max_tool_calls,
+    )
+
+
+async def _run_tool_loop_inner(
+    provider: LLMProvider,
+    system_prompt: str,
+    initial_user_message: str,
+    project_dir: Path,
+    max_tool_calls: int = 50,
+) -> ToolLoopResult:
+    """Inner tool loop implementation."""
     messages: list[dict] = [
         {"role": "user", "content": initial_user_message},
     ]

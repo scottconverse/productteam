@@ -464,8 +464,10 @@ def _forge_listen(with_dashboard: bool) -> None:
         if host == "0.0.0.0":
             import socket
             try:
-                local_ip = socket.gethostbyname(socket.gethostname())
-            except Exception:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                    s.connect(("8.8.8.8", 80))
+                    local_ip = s.getsockname()[0]
+            except OSError:
                 local_ip = "your-machine-ip"
             console.print(f"[green]Dashboard:[/green] http://localhost:{port}")
             console.print(f"[green]From phone:[/green] http://{local_ip}:{port}")

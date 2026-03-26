@@ -33,3 +33,6 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# Temporary commit files
+.commit_msg.txt

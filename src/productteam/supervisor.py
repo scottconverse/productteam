@@ -227,6 +227,17 @@ class Supervisor:
             )
             stages.append(result)
 
+        # 4b. Design Evaluation
+        if self.config.pipeline.require_design_review:
+            if not _is_stage_complete(self.state, "evaluate-design") or rebuild:
+                result = await self._run_thinker_stage(
+                    PipelineStage.EVALUATE_DESIGN, "evaluator-design",
+                    f"Evaluate design quality for the project. Concept: {concept}"
+                )
+                stages.append(result)
+                if result.status != "complete":
+                    return SupervisorResult(concept=concept, stages=stages, status="stuck")
+
         # 5. Ship gate
         if not await self._gate("Ship Approval", ""):
             return SupervisorResult(concept=concept, stages=stages, status="partial")
@@ -249,10 +260,12 @@ class Supervisor:
             prd_content = self._read_artifact("prd")
             return await self._run_thinker_stage(stage, "planner", prd_content)
         elif stage == PipelineStage.BUILD:
-            sprint_name = sprint or self._find_sprints()[0] if self._find_sprints() else "sprint-001"
+            sprints = self._find_sprints()
+            sprint_name = sprint or (sprints[0] if sprints else "sprint-001")
             return await self._build_evaluate_loop(sprint_name)
         elif stage == PipelineStage.EVALUATE:
-            sprint_name = sprint or self._find_sprints()[-1] if self._find_sprints() else "sprint-001"
+            sprints = self._find_sprints()
+            sprint_name = sprint or (sprints[-1] if sprints else "sprint-001")
             return await self._run_thinker_stage(
                 stage, "evaluator",
                 f"Evaluate sprint {sprint_name}"
@@ -367,6 +380,7 @@ class Supervisor:
                 initial_user_message=build_prompt,
                 project_dir=self.project_dir,
                 max_tool_calls=self.config.pipeline.builder_max_tool_calls,
+                timeout_seconds=self.config.pipeline.builder_timeout_seconds,
             )
 
             if build_result.status == "stuck":

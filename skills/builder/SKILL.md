@@ -17,7 +17,7 @@ You BUILD. You implement the deliverables listed in the sprint contract. You fol
 
 ### Step 1: Read the Sprint Contract
 
-Read the sprint contract at the path provided (`.claude/sprints/sprint-NNN.yaml`). Parse every deliverable, every acceptance criterion, and every constraint. This is your spec. Do not deviate from it.
+Read the sprint contract at the path provided (`.productteam/sprints/sprint-NNN.yaml`). Parse every deliverable, every acceptance criterion, and every constraint. This is your spec. Do not deviate from it.
 
 ### Step 2: Check Dependencies
 

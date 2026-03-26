@@ -1,7 +1,0 @@
-Add Claude Code context, terms of service, update doc-writer
-
-README and landing page now specify ProductTeam is built for Claude Code.
-Added terms of service page with AI-specific disclaimers.
-Doc Writer skill now produces terms.html as a standard deliverable.
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
