@@ -77,7 +77,7 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 
   <!-- Submit form -->
   <form class="submit-form" id="submit-form" onsubmit="submitIdea(event)">
-    <input class="submit-input" id="concept-input" type="text" placeholder="Describe your product idea..." autocomplete="off" required>
+    <input class="submit-input" id="concept-input" type="text" placeholder="Describe your product idea..." autocomplete="off" required maxlength="500">
     <button class="submit-btn" type="submit" id="submit-btn">Forge it</button>
   </form>
   <div class="submit-msg" id="submit-msg"></div>
@@ -92,6 +92,15 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 <script>
 let selectedJob = null;
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 async function submitIdea(e) {
   e.preventDefault();
@@ -114,7 +123,7 @@ async function submitIdea(e) {
     });
     const data = await resp.json();
     if (data.ok) {
-      msg.textContent = 'Submitted: ' + data.job_id;
+      msg.textContent = 'Submitted: ' + escapeHtml(data.job_id);
       msg.className = 'submit-msg ok';
       input.value = '';
       refresh();
@@ -138,10 +147,11 @@ async function refresh() {
     tbody.innerHTML = '';
     for (const job of jobs) {
       const tr = document.createElement('tr');
+      const eid = escapeHtml(job.job_id);
       const actions = job.status === 'waiting_gate'
-        ? `<a class="btn btn-approve" href="#" onclick="approve('${job.job_id}');return false;">Approve</a><a class="btn btn-reject" href="#" onclick="reject('${job.job_id}');return false;">Reject</a>`
+        ? `<a class="btn btn-approve" href="#" onclick="approve('${eid}');return false;">Approve</a><a class="btn btn-reject" href="#" onclick="reject('${eid}');return false;">Reject</a>`
         : '';
-      tr.innerHTML = `<td style="font-family:var(--mono)">${job.job_id}</td><td>${job.concept}</td><td class="status-${job.status}">${job.status}</td><td>${job.current_stage||'-'}</td><td>${actions}</td>`;
+      tr.innerHTML = `<td style="font-family:var(--mono)">${eid}</td><td>${escapeHtml(job.concept)}</td><td class="status-${escapeHtml(job.status)}">${escapeHtml(job.status)}</td><td>${escapeHtml(job.current_stage||'-')}</td><td>${actions}</td>`;
       tr.style.cursor = 'pointer';
       tr.onclick = () => { selectedJob = job.job_id; loadLog(job.job_id); };
       tbody.appendChild(tr);
@@ -186,8 +196,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if self.path == "/api/submit":
-            # Read JSON body
-            content_length = int(self.headers.get("Content-Length", 0))
+            MAX_BODY = 4096
+            try:
+                content_length = int(self.headers.get("Content-Length", 0))
+            except (TypeError, ValueError):
+                self._respond(400, "application/json", '{"ok":false,"error":"invalid content-length"}')
+                return
+            if content_length > MAX_BODY:
+                self._respond(413, "application/json", '{"ok":false,"error":"concept too long"}')
+                return
             body = self.rfile.read(content_length).decode("utf-8") if content_length else "{}"
             try:
                 data = json.loads(body)

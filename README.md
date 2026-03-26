@@ -314,6 +314,8 @@ github_repo = ""
 poll_interval_seconds = 10
 ```
 
+> **Security note:** The dashboard binds to `0.0.0.0` by default — accessible to all devices on your LAN. Anyone on your network can view jobs, submit ideas, approve gates, and read log output. On shared or public networks, set `status_host = "127.0.0.1"` to restrict access to localhost only.
+
 ## Multi-Provider Setup
 
 ### Anthropic (default)
