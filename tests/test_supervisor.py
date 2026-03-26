@@ -326,6 +326,96 @@ def test_parse_verdict_fail(tmp_path):
     assert supervisor._parse_verdict("evaluator_verdict: FAIL") == "fail"
 
 
+def test_parse_verdict_yaml_structured(tmp_path):
+    """Parses verdict from structured YAML response."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+
+    yaml_response = (
+        "sprint: 1\n"
+        "evaluator_verdict: PASS\n"
+        "test_results:\n"
+        "  total: 10\n"
+        "  passed: 10\n"
+    )
+    assert supervisor._parse_verdict(yaml_response) == "pass"
+
+
+def test_parse_verdict_no_false_positive_on_narrative(tmp_path):
+    """Verdict parser does not misfire on 'pass' in narrative text."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+
+    # Old parser would match "pass" in the narrative and return "pass"
+    tricky = (
+        "This test will pass once you fix the import.\n"
+        "evaluator_verdict: NEEDS_WORK\n"
+        "Fix the broken import on line 5."
+    )
+    assert supervisor._parse_verdict(tricky) == "needs_work"
+
+
+def test_parse_verdict_defaults_to_needs_work(tmp_path):
+    """Verdict parser returns needs_work when no verdict found."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+
+    assert supervisor._parse_verdict("No structured output at all.") == "needs_work"
+
+
+# ---------------------------------------------------------------------------
+# Context summarization tests
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_eval_feedback_extracts_failures(tmp_path):
+    """Summarizer extracts only FAIL criteria and CRITICAL/HIGH findings."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+
+    yaml_eval = (
+        "evaluator_verdict: NEEDS_WORK\n"
+        "acceptance_criteria:\n"
+        "  - criterion: Feature A works\n"
+        "    status: PASS\n"
+        "    evidence: Verified\n"
+        "  - criterion: Feature B works\n"
+        "    status: FAIL\n"
+        "    evidence: Missing import\n"
+        "additional_findings:\n"
+        "  - severity: LOW\n"
+        "    finding: Minor style issue\n"
+        "    suggestion: Fix later\n"
+        "  - severity: CRITICAL\n"
+        "    finding: SQL injection\n"
+        "    suggestion: Use parameterized queries\n"
+        "summary: |\n"
+        "  Feature B is broken.\n"
+    )
+    result = supervisor._summarize_eval_feedback(yaml_eval, 1)
+    assert "FAIL: Feature B works" in result
+    assert "CRITICAL: SQL injection" in result
+    assert "Feature A works" not in result  # PASS criteria excluded
+    assert "Minor style issue" not in result  # LOW finding excluded
+    assert "Feature B is broken" in result  # summary included
+
+
+def test_summarize_eval_feedback_fallback_on_plain_text(tmp_path):
+    """Summarizer falls back to truncation for non-YAML responses."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+
+    plain = "This is not YAML, just a plain text evaluator response. " * 100
+    result = supervisor._summarize_eval_feedback(plain, 2)
+    assert result.startswith("--- Evaluator feedback (loop 2) ---")
+    assert len(result) <= 2100  # header + 2000 chars max
+
+
 # ---------------------------------------------------------------------------
 # Resume behavior
 # ---------------------------------------------------------------------------
@@ -389,23 +479,23 @@ async def test_full_pipeline_two_sprints(tmp_path):
     # Thinker stages use provider.complete:
     #   1. PRD
     #   2. Plan
-    #   3. Design evaluation
     mock_provider.complete = AsyncMock(side_effect=[
         "# PRD\nA CLI tool.",                          # PRD
         "# Plan\nsprint-001: core\nsprint-002: tests", # Plan
-        "Design looks good. PASS",                      # Design eval
     ])
 
     # Doer stages use provider.complete_with_tools (via tool loop):
     #   Sprint 1: builder → evaluator(PASS)
     #   Sprint 2: builder → evaluator(PASS)
     #   Document: doc-writer
+    #   Design evaluation (now a doer with retry loop)
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
         _eval_response("Sprint 1 built."),                          # builder sprint-001
         _eval_response("evaluator_verdict: PASS\nAll good."),       # evaluator sprint-001
         _eval_response("Sprint 2 built."),                          # builder sprint-002
         _eval_response("evaluator_verdict: PASS\nTests pass."),     # evaluator sprint-002
         _eval_response("# Documentation\nAll docs written."),       # doc-writer
+        _eval_response("evaluator_verdict: PASS\nDesign approved."),# design evaluator
     ])
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)

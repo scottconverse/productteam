@@ -14,6 +14,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -227,16 +229,26 @@ class Supervisor:
             )
             stages.append(result)
 
-        # 4b. Design Evaluation
+        # 4b. Design Evaluation loop (mirrors build-evaluate pattern)
         if self.config.pipeline.require_design_review:
             if not _is_stage_complete(self.state, "evaluate-design") or rebuild:
-                result = await self._run_thinker_stage(
-                    PipelineStage.EVALUATE_DESIGN, "evaluator-design",
-                    f"Evaluate design quality for the project. Concept: {concept}"
-                )
-                stages.append(result)
-                if result.status != "complete":
-                    return SupervisorResult(concept=concept, stages=stages, status="stuck")
+                for design_loop in range(1, self.config.pipeline.max_loops + 1):
+                    result = await self._run_tool_loop_stage(
+                        PipelineStage.EVALUATE_DESIGN, "evaluator-design",
+                        f"Evaluate design quality. Read docs/index.html, docs/terms.html, "
+                        f"and README.md. Concept: {concept}",
+                    )
+                    stages.append(result)
+                    if result.status != "complete":
+                        return SupervisorResult(concept=concept, stages=stages, status="stuck")
+
+                    verdict = self._parse_verdict(result.raw_response)
+                    console.print(f"  Design verdict: [{'green' if verdict == 'pass' else 'red'}]{verdict}[/]")
+                    if verdict == "pass":
+                        break
+                    if verdict == "fail" or design_loop == self.config.pipeline.max_loops:
+                        console.print("[red]Design evaluation did not pass after max loops.[/red]")
+                        return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
         # 5. Ship gate
         if not await self._gate("Ship Approval", ""):
@@ -536,8 +548,8 @@ class Supervisor:
                     raw_response=eval_response,
                 )
 
-            # NEEDS_WORK — continue loop
-            sprint_contract += f"\n\n--- Evaluator feedback (loop {loop_num}) ---\n{eval_response}"
+            # NEEDS_WORK — continue loop with summarized feedback
+            sprint_contract += "\n\n" + self._summarize_eval_feedback(eval_response, loop_num)
 
         # Exhausted all loops
         console.print(f"  [red]Max loops ({max_loops}) exhausted for {sprint_name}[/red]")
@@ -623,16 +635,57 @@ class Supervisor:
                 sprints.append(item.stem)
         return sprints
 
+    def _summarize_eval_feedback(self, eval_response: str, loop_num: int) -> str:
+        """Extract actionable findings from an evaluation report.
+
+        Returns only failed acceptance criteria and CRITICAL/HIGH findings
+        to keep the Builder's context window focused on what needs fixing.
+        """
+        try:
+            data = yaml.safe_load(eval_response)
+            if isinstance(data, dict):
+                lines = [f"--- Evaluator feedback (loop {loop_num}) ---"]
+                for crit in data.get("acceptance_criteria", []):
+                    if str(crit.get("status", "")).upper() == "FAIL":
+                        lines.append(
+                            f"FAIL: {crit.get('criterion', '')} — {crit.get('evidence', '')}"
+                        )
+                for finding in data.get("additional_findings", []):
+                    if finding.get("severity", "") in ("CRITICAL", "HIGH"):
+                        lines.append(
+                            f"{finding['severity']}: {finding.get('finding', '')} "
+                            f"— {finding.get('suggestion', '')}"
+                        )
+                if data.get("summary"):
+                    lines.append(f"Summary: {data['summary'].strip()}")
+                if len(lines) > 1:  # more than just the header
+                    return "\n".join(lines)
+        except Exception:
+            pass
+        # Fallback: truncate raw response to 2000 chars
+        return f"--- Evaluator feedback (loop {loop_num}) ---\n{eval_response[:2000]}"
+
     def _parse_verdict(self, eval_response: str) -> str:
-        """Parse evaluator verdict from response text."""
-        lower = eval_response.lower()
-        if "evaluator_verdict: pass" in lower or "verdict: pass" in lower:
-            return "pass"
-        if "evaluator_verdict: fail" in lower or "verdict: fail" in lower:
-            return "fail"
-        if "evaluator_verdict: needs_work" in lower or "verdict: needs_work" in lower:
-            return "needs_work"
-        # Heuristic fallback
-        if "pass" in lower and "fail" not in lower and "needs_work" not in lower:
-            return "pass"
-        return "needs_work"
+        """Parse evaluator verdict from response YAML."""
+        # Primary: try structured YAML parse
+        try:
+            data = yaml.safe_load(eval_response)
+            if isinstance(data, dict):
+                verdict = str(data.get("evaluator_verdict", "")).lower()
+                if verdict in ("pass", "needs_work", "fail"):
+                    return verdict
+        except yaml.YAMLError:
+            pass
+
+        # Fallback: scan for the exact YAML key on its own line
+        for line in eval_response.lower().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("evaluator_verdict:") or stripped.startswith("verdict:"):
+                if "pass" in stripped:
+                    return "pass"
+                if "fail" in stripped:
+                    return "fail"
+                if "needs_work" in stripped:
+                    return "needs_work"
+
+        return "needs_work"  # safe default
