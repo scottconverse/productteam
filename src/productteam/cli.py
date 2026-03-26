@@ -20,6 +20,9 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+test_app = typer.Typer(help="Run ProductTeam test suite.")
+app.add_typer(test_app, name="test")
+
 config_app = typer.Typer(help="Manage productteam.toml configuration.")
 app.add_typer(config_app, name="config")
 
@@ -374,6 +377,131 @@ def run_cmd(
     elif result.status == "failed":
         console.print("\n[red]Pipeline failed.[/red]")
         raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# productteam test
+# ---------------------------------------------------------------------------
+
+_LIVE_API_KEY_MAP = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+}
+
+
+@test_app.callback(invoke_without_command=True)
+def test_cmd(
+    ctx: typer.Context,
+    live: bool = typer.Option(False, "--live", help="Run live integration tests (makes real API calls)"),
+    provider: Optional[str] = typer.Option(
+        None, "--provider", "-p",
+        help="LLM provider for live tests (anthropic|openai|ollama|gemini). Default: from config or anthropic.",
+    ),
+    model: Optional[str] = typer.Option(
+        None, "--model", "-m",
+        help="Model override for live tests.",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose pytest output"),
+    coverage: bool = typer.Option(False, "--cov", help="Run with coverage reporting"),
+    keyword: Optional[str] = typer.Option(None, "-k", help="pytest -k filter expression"),
+    directory: Optional[Path] = typer.Option(
+        None, "--dir", "-d", help="Project directory (default: current directory)"
+    ),
+) -> None:
+    """Run the ProductTeam test suite.
+
+    By default runs offline unit tests only. Use --live to run integration
+    tests that make real API calls (costs money, requires API key).
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+
+    import subprocess
+    import sys
+
+    target = (directory or Path.cwd()).resolve()
+
+    # Build pytest args
+    pytest_args = [sys.executable, "-m", "pytest"]
+
+    if live:
+        _live_preflight(target, provider, model)
+        pytest_args += ["-m", "live"]
+    else:
+        pytest_args += ["-m", "not live"]
+
+    if verbose:
+        pytest_args.append("-v")
+    if coverage:
+        pytest_args += ["--cov=productteam", "--cov-report=term-missing"]
+    if keyword:
+        pytest_args += ["-k", keyword]
+
+    pytest_args.append("tests/")
+
+    console.print(
+        f"[bold]Running {'live integration' if live else 'unit'} tests[/bold]"
+        + (f" [dim](provider: {provider or 'config default'})[/dim]" if live else "")
+    )
+    console.print(f"[dim]{' '.join(pytest_args)}[/dim]\n")
+
+    result = subprocess.run(pytest_args, cwd=str(target))
+    raise typer.Exit(code=result.returncode)
+
+
+def _live_preflight(target: Path, provider: str | None, model: str | None) -> None:
+    """Safety checks before running live tests."""
+    import os
+
+    # Resolve provider from config if not specified
+    effective_provider = provider
+    if not effective_provider:
+        config_path = target / "productteam.toml"
+        if config_path.exists():
+            from productteam.config import load_config
+            cfg = load_config(config_path)
+            effective_provider = cfg.pipeline.provider
+        else:
+            effective_provider = "anthropic"
+
+    # Check for API key
+    env_var = _LIVE_API_KEY_MAP.get(effective_provider, "")
+    if env_var:
+        key = os.environ.get(env_var, "")
+        if not key:
+            error_console.print(
+                f"[red]Error:[/red] Live tests require {env_var} to be set.\n"
+                f"  export {env_var}=sk-..."
+            )
+            raise typer.Exit(code=1)
+        # Mask the key for display
+        masked = key[:4] + "..." + key[-4:] if len(key) > 12 else "***"
+        console.print(f"[dim]API key:[/dim] {env_var}={masked}")
+    elif effective_provider == "ollama":
+        console.print("[dim]Provider: ollama (local, no API key needed)[/dim]")
+
+    # Safety warning
+    console.print(
+        Panel(
+            "[bold yellow]Live test warning[/bold yellow]\n\n"
+            "This will make real API calls that:\n"
+            "  [yellow]$[/yellow]  Cost money (billed to your API key)\n"
+            "  [yellow]>[/yellow]  Send test prompts to the provider\n"
+            "  [yellow]~[/yellow]  Take 30-120 seconds to complete\n\n"
+            "The test suite uses small prompts to minimize cost.\n"
+            f"Provider: [bold]{effective_provider}[/bold]"
+            + (f"  Model: [bold]{model}[/bold]" if model else ""),
+            border_style="yellow",
+            title="[bold yellow]API Key Safety[/bold yellow]",
+        )
+    )
+
+    # Set env vars for live tests to pick up
+    if provider:
+        os.environ["PRODUCTTEAM_TEST_PROVIDER"] = provider
+    if model:
+        os.environ["PRODUCTTEAM_TEST_MODEL"] = model
 
 
 @config_app.command("set")

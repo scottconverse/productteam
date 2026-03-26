@@ -159,6 +159,15 @@ async def test_supervisor_thinker_timeout(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def _eval_response(verdict_text: str) -> dict:
+    """Build a text-only complete_with_tools response for evaluator mocks."""
+    return {
+        "role": "assistant",
+        "content": [{"type": "text", "text": verdict_text}],
+        "stop_reason": "end_turn",
+    }
+
+
 @pytest.mark.asyncio
 async def test_build_evaluate_pass_loop1(tmp_path):
     """Build-evaluate loop passes on first iteration."""
@@ -172,15 +181,12 @@ async def test_build_evaluate_pass_loop1(tmp_path):
     config = _make_config()
     mock_provider = AsyncMock()
 
-    # Builder returns text-only (complete immediately)
-    mock_provider.complete_with_tools = AsyncMock(return_value={
-        "role": "assistant",
-        "content": [{"type": "text", "text": "Build complete."}],
-        "stop_reason": "end_turn",
-    })
-
-    # Evaluator returns PASS
-    mock_provider.complete = AsyncMock(return_value="evaluator_verdict: PASS\nAll tests pass.")
+    # Both builder and evaluator go through complete_with_tools (tool loop).
+    # Builder completes first, then evaluator returns PASS verdict.
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Build complete."),
+        _eval_response("evaluator_verdict: PASS\nAll tests pass."),
+    ])
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     result = await supervisor._build_evaluate_loop("sprint-001")
@@ -199,24 +205,19 @@ async def test_build_evaluate_needs_work_then_pass(tmp_path):
     config = _make_config()
     mock_provider = AsyncMock()
 
-    # Builder always completes immediately
-    mock_provider.complete_with_tools = AsyncMock(return_value={
-        "role": "assistant",
-        "content": [{"type": "text", "text": "Built."}],
-        "stop_reason": "end_turn",
-    })
-
-    # Evaluator: NEEDS_WORK first, then PASS
-    mock_provider.complete = AsyncMock(side_effect=[
-        "evaluator_verdict: NEEDS_WORK\nFix the tests.",
-        "evaluator_verdict: PASS\nAll good.",
+    # Loop 1: builder → evaluator(NEEDS_WORK), Loop 2: builder → evaluator(PASS)
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Built."),
+        _eval_response("evaluator_verdict: NEEDS_WORK\nFix the tests."),
+        _eval_response("Built again."),
+        _eval_response("evaluator_verdict: PASS\nAll good."),
     ])
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     result = await supervisor._build_evaluate_loop("sprint-001")
 
     assert result.status == "complete"
-    assert mock_provider.complete.call_count == 2
+    assert mock_provider.complete_with_tools.call_count == 4
 
 
 @pytest.mark.asyncio
@@ -230,12 +231,10 @@ async def test_build_evaluate_fail_on_verdict(tmp_path):
     config = _make_config()
     mock_provider = AsyncMock()
 
-    mock_provider.complete_with_tools = AsyncMock(return_value={
-        "role": "assistant",
-        "content": [{"type": "text", "text": "Built."}],
-        "stop_reason": "end_turn",
-    })
-    mock_provider.complete = AsyncMock(return_value="evaluator_verdict: FAIL\nFundamental issues.")
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Built."),
+        _eval_response("evaluator_verdict: FAIL\nFundamental issues."),
+    ])
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     result = await supervisor._build_evaluate_loop("sprint-001")
@@ -258,12 +257,13 @@ async def test_build_evaluate_max_loops_exhausted(tmp_path):
     })
 
     mock_provider = AsyncMock()
-    mock_provider.complete_with_tools = AsyncMock(return_value={
-        "role": "assistant",
-        "content": [{"type": "text", "text": "Built."}],
-        "stop_reason": "end_turn",
-    })
-    mock_provider.complete = AsyncMock(return_value="evaluator_verdict: NEEDS_WORK\nStill broken.")
+    # 2 loops: builder + evaluator(NEEDS_WORK) each
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Built."),
+        _eval_response("evaluator_verdict: NEEDS_WORK\nStill broken."),
+        _eval_response("Built again."),
+        _eval_response("evaluator_verdict: NEEDS_WORK\nStill broken."),
+    ])
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     result = await supervisor._build_evaluate_loop("sprint-001")

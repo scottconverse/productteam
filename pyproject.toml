@@ -56,3 +56,6 @@ packages = ["src/productteam"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+markers = [
+    "live: marks tests that make real API calls (deselect with '-m \"not live\"')",
+]

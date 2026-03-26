@@ -284,3 +284,59 @@ def test_run_default_directory(tmp_path, monkeypatch):
     runner.invoke(app, ["init"])
     result = runner.invoke(app, ["run", "test concept", "--dry-run", "--auto-approve"])
     assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# test command
+# ---------------------------------------------------------------------------
+
+
+def test_test_command_exists():
+    """test command is registered and shows help."""
+    result = runner.invoke(app, ["test", "--help"])
+    assert result.exit_code == 0
+    assert "live" in result.output.lower()
+
+
+def test_test_live_no_api_key(tmp_path, monkeypatch):
+    """test --live exits with error when API key is missing."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    runner.invoke(app, ["init", str(tmp_path)])
+    result = runner.invoke(app, ["test", "--live", "--dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "ANTHROPIC_API_KEY" in result.output
+
+
+def test_test_live_shows_safety_warning(tmp_path, monkeypatch):
+    """test --live shows API key safety panel when key is present."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-1234567890")
+    runner.invoke(app, ["init", str(tmp_path)])
+    # Will fail at pytest execution but we check the safety output
+    result = runner.invoke(app, ["test", "--live", "--dir", str(tmp_path)])
+    assert "Live test warning" in result.output or "API Key Safety" in result.output
+    assert "Cost money" in result.output
+
+
+def test_test_live_masks_api_key(tmp_path, monkeypatch):
+    """test --live masks the API key in output."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-key-1234567890")
+    runner.invoke(app, ["init", str(tmp_path)])
+    result = runner.invoke(app, ["test", "--live", "--dir", str(tmp_path)])
+    # Full key should never appear
+    assert "sk-ant-test-key-1234567890" not in result.output
+    # Masked version should appear
+    assert "sk-a" in result.output
+    assert "7890" in result.output
+
+
+def test_test_live_ollama_no_key_needed(tmp_path, monkeypatch):
+    """test --live with ollama does not require an API key."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    runner.invoke(app, ["init", str(tmp_path)])
+    result = runner.invoke(app, ["test", "--live", "--provider", "ollama", "--dir", str(tmp_path)])
+    # Should not fail on missing key — will fail at pytest execution instead
+    assert "ANTHROPIC_API_KEY" not in result.output
