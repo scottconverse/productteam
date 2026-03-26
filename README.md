@@ -1,197 +1,319 @@
 # ProductTeam
 
-**A product development pipeline powered by specialized AI agents.**
+**Turn a product concept into shipping code.**
 
-Turn a product concept into shipping code. PRD → Plan → Build → Evaluate → Document → Ship.
+ProductTeam is an AI-powered product development pipeline. You describe what you want to build. It writes the PRD, plans the sprints, builds the code, evaluates the results, writes the docs, and ships. Eight specialized agents, three approval gates, one CLI.
 
-## Built For Claude Code
+## Install
 
-- **ProductTeam is a set of Claude Code skills** — SKILL.md files that Claude Code reads and follows as agent instructions
-- **Designed for Claude Code** in the Claude desktop app
-- **Works best with Claude Opus or Sonnet models** — these models handle the multi-step reasoning and code generation the pipeline requires
-- **Not a standalone tool** — requires Claude Code as the runtime. ProductTeam provides the agent skills; Claude Code provides the execution environment
-- Each skill is a markdown file that defines an agent's role, process, and rules. Claude Code reads the skill and acts accordingly.
+```bash
+pip install productteam
+```
 
-## The Idea
+Requires Python 3.11+.
 
-Every modern software team has specialized roles: product managers write specs, engineers build, QA tests, designers review, technical writers document. ProductTeam encodes these roles as AI agent skills with a key insight from Anthropic's research: **separate the builder from the judge.**
+## Quick Start
 
-The Builder can never declare its own work "done." Only the Evaluator can. This GAN-inspired loop (generator + discriminator) produces measurably better output than a single agent working alone.
+```bash
+# Initialize a project
+productteam init
+
+# Configure your provider
+productteam config set pipeline.provider anthropic
+# Set your API key
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Run the full pipeline
+productteam run "a CLI tool that estimates LLM API costs"
+
+# Or resume from where you left off
+productteam run
+
+# Check your environment
+productteam doctor
+```
 
 ## The Pipeline
 
 ```
-  Product Manager (human)
-      | "I want a tool that does X"
-      v
- +--------------+
- |  PRD WRITER  |  --> Structured PRD document
- +--------------+
-      | User approves PRD
-      v
- +--------------+
- |   PLANNER    |  --> Sprint contracts with testable acceptance criteria
- +--------------+
-      | User approves sprint scope
-      v
- +--------------+       +----------------+
- |   BUILDER    | ----> |  UI BUILDER    |   (if visual deliverables)
- +--------------+       +----------------+
-      |                       |
-      v                       v
- +--------------+       +--------------------+
- |  EVALUATOR   |       | DESIGN EVALUATOR   |
- +--------------+       +--------------------+
-      |                       |
-      +--- PASS <-------------+
-      |
-      v
- +--------------+
- |  DOC WRITER  |  --> README, landing page, PDF, changelog
- +--------------+
-      |
-      v
-      SHIP
+You: "I want a tool that does X"
+  |
+  v
+PRD Writer  -->  Planner  -->  Builder <-> Evaluator  -->  Doc Writer  -->  Ship
+                                  (max 3 loops)
+```
+
+**Three approval gates.** You stop three times:
+
+| Gate | When | You Decide |
+|------|------|-----------|
+| PRD Approval | After PRD is written | "Does this capture my intent?" |
+| Sprint Approval | After sprints are planned | "Does this scope look right?" |
+| Ship Approval | After all evaluations pass | "Ready to push?" |
+
+Everything between gates runs automatically.
+
+## Thinker/Doer Architecture
+
+This is the core design decision. Stages split into two types:
+
+| Stage | Type | How It Runs |
+|-------|------|-------------|
+| PRD Writer | Thinker | Single LLM call, structured text output |
+| Planner | Thinker | Single LLM call, structured text output |
+| Evaluator | Thinker | Single LLM call, structured text output |
+| Design Evaluator | Thinker | Single LLM call, structured text output |
+| Doc Writer | Thinker | Single LLM call, structured text output |
+| **Builder** | **Doer** | **Tool-use loop** (read/write files, run commands) |
+| **UI Builder** | **Doer** | **Tool-use loop** (read/write files, run commands) |
+
+**Thinker stages** support all configured providers (Anthropic, OpenAI, Ollama, Gemini).
+
+**Doer stages** run an agentic tool-use loop with exactly four tools: `read_file`, `write_file`, `run_bash`, `list_dir`. The LLM calls tools, the supervisor executes them, results go back to the LLM, repeat until the builder says "ready for review."
+
+## CLI Reference
+
+### `productteam init [DIRECTORY]`
+
+Initialize ProductTeam in a project directory.
+
+```
+Options:
+  --force, -f    Overwrite existing files
+
+Examples:
+  productteam init
+  productteam init ./my-project
+  productteam init --force
+```
+
+### `productteam run [CONCEPT] [OPTIONS]`
+
+Run the full product development pipeline.
+
+```
+Arguments:
+  CONCEPT    The product concept to build. Optional if resuming.
+
+Options:
+  --step        Run only a specific stage (prd|plan|build|evaluate|document|ship)
+  --sprint      Target a specific sprint (with --step build or evaluate)
+  --auto-approve   Skip interactive approval gates
+  --rebuild     Force rebuild even if a sprint has already passed
+  --dry-run     Show what would happen without calling the LLM
+  --dir, -d     Project directory (default: current directory)
+
+Examples:
+  productteam run "a CLI tool that estimates LLM API costs"
+  productteam run                          # resume from current state
+  productteam run --step prd               # rewrite the PRD only
+  productteam run --auto-approve           # headless / CI mode
+  productteam run --rebuild --sprint sprint-002
+```
+
+### `productteam status [DIRECTORY]`
+
+Show pipeline status for the current project.
+
+```
+Examples:
+  productteam status
+  productteam status ./my-project
+```
+
+### `productteam doctor`
+
+Check ProductTeam environment and configuration.
+
+```
+Options:
+  --no-network   Skip API reachability checks
+  --json         Output as JSON for scripting
+  --dir, -d      Project directory
+
+Examples:
+  productteam doctor
+  productteam doctor --json
+  productteam doctor --no-network
+```
+
+### `productteam config`
+
+Show current productteam.toml settings.
+
+### `productteam config set KEY VALUE`
+
+Set a configuration value.
+
+```
+Examples:
+  productteam config set pipeline.provider openai
+  productteam config set pipeline.model claude-opus-4-6
+  productteam config set pipeline.max_loops 5
+  productteam config set gates.prd_approval false
+```
+
+### `productteam forge "CONCEPT"`
+
+Submit an idea to Forge. Returns a job ID.
+
+```
+Examples:
+  productteam forge "An app that tracks local ballot measures"
+```
+
+### `productteam forge --listen [--dashboard]`
+
+Start the Forge daemon. Watches for queued jobs and runs them headlessly.
+
+```
+Options:
+  --dashboard    Enable the status dashboard at http://127.0.0.1:7654
+
+Examples:
+  productteam forge --listen
+  productteam forge --listen --dashboard
+```
+
+### `productteam forge status [JOB-ID]`
+
+Show all jobs or detailed status for one job.
+
+### `productteam forge approve JOB-ID`
+
+Approve a gate for a waiting job.
+
+### `productteam forge reject JOB-ID`
+
+Reject a gate and fail the job.
+
+### `productteam forge logs JOB-ID`
+
+Tail the log for a job.
+
+```
+Options:
+  --tail, -n    Number of lines (default: 50)
+```
+
+## Forge
+
+Forge is how you use ProductTeam from your phone. Submit an idea from anywhere. It comes back a product.
+
+```bash
+# Submit from your phone (via Dispatch, CLI, or GitHub Issue)
+productteam forge "An app that tracks local ballot measures"
+# Job ID: a1b2c3d4
+
+# On your machine, start the daemon
+productteam forge --listen --dashboard
+
+# Check status from anywhere
+productteam forge status a1b2c3d4
+
+# Approve gates when notified
+productteam forge approve a1b2c3d4
+```
+
+**Queue backends:**
+- `file` (default) — zero infrastructure, queue lives at `~/.productteam/forge/queue/`
+- `github_issues` — uses GitHub Issues with the `productteam-forge` label
+
+**Notification backends:**
+- `none` (default)
+- `webhook` — POST JSON to any URL
+- `slack` — POST to a Slack webhook
+
+## Configuration
+
+All configuration lives in `productteam.toml`:
+
+```toml
+[project]
+name = "my-app"
+version = "0.1.0"
+
+[pipeline]
+provider = "anthropic"          # anthropic | openai | ollama | gemini
+model = "claude-sonnet-4-6"
+api_base = ""                   # for openai-compatible servers
+max_loops = 3                   # build-evaluate loop limit
+require_evaluator = true
+require_design_review = true
+stage_timeout_seconds = 120     # thinker stage timeout
+builder_timeout_seconds = 300   # doer stage wall time
+builder_max_tool_calls = 50     # tool call limit per builder run
+auto_approve = false            # skip approval gates
+
+[gates]
+prd_approval = true
+sprint_approval = true
+ship_approval = true
+
+[forge]
+enabled = false
+queue_backend = "file"          # file | github_issues
+notification_backend = "none"   # none | webhook | slack
+notification_url = ""
+status_port = 7654
+github_repo = ""
+poll_interval_seconds = 10
+```
+
+## Multi-Provider Setup
+
+### Anthropic (default)
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+productteam config set pipeline.provider anthropic
+productteam config set pipeline.model claude-sonnet-4-6
+```
+
+### OpenAI
+
+```bash
+export OPENAI_API_KEY=sk-...
+productteam config set pipeline.provider openai
+productteam config set pipeline.model gpt-4o
+```
+
+### Ollama (local, no API key)
+
+```bash
+# Start Ollama first: ollama serve
+productteam config set pipeline.provider ollama
+productteam config set pipeline.model llama3
+```
+
+### Gemini
+
+```bash
+export GEMINI_API_KEY=...
+productteam config set pipeline.provider gemini
+productteam config set pipeline.model gemini-2.0-flash
+```
+
+### OpenAI-Compatible (LM Studio, vLLM, etc.)
+
+```bash
+productteam config set pipeline.provider openai
+productteam config set pipeline.model local-model
+productteam config set pipeline.api_base http://localhost:1234/v1
 ```
 
 ## The Team (8 Skills)
 
 | Skill | Role | What It Does |
 |-------|------|-------------|
-| `prd-writer` | Product Manager | Takes a concept, asks clarifying questions, researches competitors, produces a structured PRD |
-| `planner` | Tech Lead | Reads PRD, decomposes into sprint contracts with testable acceptance criteria |
-| `builder` | Engineer | Implements sprint contracts, writes tests, declares "ready for review" (never "done") |
-| `ui-builder` | Frontend Engineer | Specialized builder for visual work: landing pages, dashboards, web UIs |
-| `evaluator` | QA Engineer | Verifies code against sprint contract, runs tests, tries to break things, grades PASS/NEEDS_WORK/FAIL |
-| `evaluator-design` | Design Reviewer | Grades visual artifacts on Coherence, Originality, Craft, and Functionality (1-5 scale) |
-| `doc-writer` | Technical Writer | Reads code (never fabricates), produces README, landing page, PDF, changelog |
-| `orchestrator` | Project Manager | Routes work, manages build-evaluate loops, enforces approval gates, writes handoff artifacts |
-
-## Quick Start
-
-### Option 1: Full pipeline (start from a concept)
-
-```
-/productteam "I want a CLI tool that estimates API costs for LLM prompts"
-```
-
-The Orchestrator will route your concept through PRD Writer, Planner, Builder, Evaluator, and Doc Writer automatically, pausing at three approval gates for your input.
-
-### Option 2: Jump into the pipeline at any stage
-
-```
-/productteam plan docs/PRD.md           # Skip to Planner with an existing PRD
-/productteam build .claude/sprints/sprint-001.yaml   # Skip to Builder
-/productteam eval .claude/sprints/sprint-001.yaml    # Skip to Evaluator
-/productteam docs                       # Skip to Doc Writer for current project
-/productteam status                     # Show current pipeline state
-```
-
-### Option 3: Drop skills into any project
-
-Copy the `skills/` directory into your project's `.claude/skills/` directory and use individual skills without the full pipeline.
-
-## How It Works
-
-### Three Approval Gates
-
-The pipeline runs automatically between gates. You only stop three times:
-
-| Gate | When | Prompt |
-|------|------|--------|
-| PRD Approval | PRD Writer produces a PRD | "Does this capture your intent?" |
-| Sprint Approval | Planner produces sprint contracts | "Does this scope look right?" |
-| Ship Approval | All evaluations pass | "Ready to commit/push/publish?" |
-
-### The Build-Evaluate Loop
-
-```
-Builder implements --> Evaluator reviews --> PASS? --> Done
-                                        --> NEEDS_WORK? --> Back to Builder (max 3 loops)
-                                        --> FAIL? --> Escalate to human
-```
-
-- The Builder declares "ready for review" -- never "done"
-- The Evaluator is skeptical by default: assumes code is broken until proven otherwise
-- Maximum 3 loops per sprint. If loop 3 still fails, the plan is wrong, not the implementation
-- The Orchestrator escalates to the user with the full evaluation history
-
-### Structured Artifacts
-
-All state lives in files, not conversation memory. The next session can pick up where the last one left off.
-
-```
-.productteam/
-  prds/           PRD documents
-  sprints/        Sprint contracts (YAML)
-  evaluations/    Evaluation reports (YAML)
-  handoffs/       Session handoff artifacts (YAML)
-```
-
-Templates for these artifacts live in `templates/`.
-
-## What Makes This Different
-
-| Other Multi-Agent Systems | ProductTeam |
-|--------------------------|-------------|
-| Agents self-evaluate | Separate skeptical judge (Evaluator) that assumes code is broken |
-| "Done" when builder says so | "Done" only when Evaluator grades PASS |
-| State in conversation memory | State in structured YAML files that persist across sessions |
-| All agents or nothing | Drop in only the skills you need |
-| Complex setup (databases, hooks, scripts) | Just markdown files in a directory |
-| Single design standard | Two evaluators: code quality (Evaluator) and visual quality (Design Evaluator) |
-
-## Proven Results
-
-Built and tested on the prompttools project (7 Python packages):
-
-- **755 tests** across 6 packages -- all written and verified through the pipeline
-- **7 real bugs** caught by Evaluators that Builders missed
-- **Planners identified gaps** in every package they analyzed
-- **All 6 packages** passed Evaluator review
-- **Design Evaluator** graded landing pages on Coherence, Originality, Craft, and Functionality
-
-## Installation
-
-### In Claude Code (recommended)
-
-Copy the `skills/` directory into your project's `.claude/skills/` directory:
-
-```bash
-cp -r productteam/skills/ your-project/.claude/skills/
-```
-
-### In Claude Desktop App
-
-Clone the repo and point Claude Code at the skills directory:
-
-```bash
-git clone https://github.com/scottconverse/productteam.git
-ln -s /path/to/productteam/skills your-project/.claude/skills
-```
-
-## Project Structure
-
-```
-productteam/
-  skills/
-    prd-writer/SKILL.md
-    planner/SKILL.md
-    builder/SKILL.md
-    ui-builder/SKILL.md
-    evaluator/SKILL.md
-    evaluator-design/SKILL.md
-    doc-writer/SKILL.md
-    orchestrator/SKILL.md
-  templates/
-    sprint-contract.yaml
-    evaluation-report.yaml
-    handoff-artifact.yaml
-  docs/
-    index.html            Landing page
-  README.md
-  LICENSE
-```
+| `prd-writer` | Product Manager | Converts concept to structured PRD |
+| `planner` | Tech Lead | Decomposes PRD into sprint contracts |
+| `builder` | Engineer | Implements code via tool-use loop |
+| `ui-builder` | Frontend Engineer | Builds visual artifacts via tool-use loop |
+| `evaluator` | QA Engineer | Verifies code against sprint contract |
+| `evaluator-design` | Design Reviewer | Grades visual work on 4 dimensions |
+| `doc-writer` | Technical Writer | Writes README, docs, changelog from code |
+| `orchestrator` | Project Manager | Routes work, manages loops and gates |
 
 ## License
 
