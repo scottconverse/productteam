@@ -43,7 +43,18 @@ What must exist before this sprint can start? Other packages installed? Specific
 
 ### Step 4: Estimate Scope
 
-Classify as: small (1-3 files, < 200 lines), medium (4-10 files, 200-800 lines), large (10+ files, 800+ lines).
+Classify as: small (1-3 files, < 200 lines) or medium (4-8 files, 200-600 lines).
+
+**"large" is not a valid scope.** If a sprint would require more than 8 files
+or 600 lines, split it into multiple sprints. A sprint is not a product version
+— it is one feature or one layer, fully buildable and testable in isolation.
+
+The Builder has a hard limit of 50 tool calls per sprint. Each file write costs
+2-3 tool calls (write + verify). That means a sprint can produce roughly 8-12
+files maximum. Plan accordingly.
+
+**Size limit:** If the sprint contract YAML exceeds 10KB, the sprint is too
+large and must be re-decomposed.
 
 ### Step 5: Write the Sprint Contract Files
 
@@ -69,7 +80,7 @@ sprint: <number>
 title: "<descriptive title>"
 source: "<PRD filename or feature request summary>"
 created: "<YYYY-MM-DD>"
-scope: small | medium | large
+scope: small | medium
 
 dependencies:
   - "<package or file that must exist>"
@@ -115,7 +126,7 @@ deliverables, and acceptance criteria look right before the Builder starts.
 2. **Every acceptance criterion must be testable.** If the Evaluator can't verify it with a yes/no answer, rewrite it.
 3. **Be specific about file paths.** The Builder shouldn't have to guess where things go.
 4. **Reference existing patterns.** If the codebase already has a convention (e.g., specific framework for CLI, specific library for models), state it as a constraint.
-5. **Don't over-decompose.** A sprint should be completable in one session. If the PRD is too big, produce only the number of sprints specified in the pipeline constraint (usually 4). Prioritize the most critical features. Note what was deferred in the final sprint's `notes` field.
+5. **Right-size every sprint.** A sprint is one feature or one layer — not a product version, not a milestone, not a roadmap phase. Each sprint must be completable in 30-40 tool calls (~8-12 files). If a PRD describes a large product, decompose into many small sprints, not a few large ones. A product with 40 files should have 6-8 sprints, not 2-3. Produce up to the number of sprints specified in the pipeline constraint. Note what was deferred in the final sprint's `notes` field.
 6. **Number sprints sequentially.** Use `list_dir` to check `.productteam/sprints/` for existing sprint files and use the next available number. Write each sprint as its own `.yaml` file using `write_file`. Never combine multiple sprints into one file.
 7. **Release sprints MUST include documentation and publishing.** When a sprint produces shippable code, the deliverables MUST include: README updates (test counts, new features, fixes), documentation updates, and any publishing steps. Code without updated docs is not shippable.
 8. **Docs deliverables are testable.** Acceptance criteria for docs include: "README reflects current test count", "Install commands are correct", "No placeholder URLs remain".
