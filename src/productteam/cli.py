@@ -23,6 +23,9 @@ app = typer.Typer(
 config_app = typer.Typer(help="Manage productteam.toml configuration.")
 app.add_typer(config_app, name="config")
 
+forge_app = typer.Typer(help="Forge: submit ideas, run pipelines headlessly.")
+app.add_typer(forge_app, name="forge")
+
 console = Console()
 error_console = Console(stderr=True)
 
@@ -350,3 +353,176 @@ def config_set(
 
     save_config(updated, config_path)
     console.print(f"[green]OK[/green] Set [bold]{key}[/bold] = [cyan]{value}[/cyan]")
+
+
+# ---------------------------------------------------------------------------
+# productteam forge
+# ---------------------------------------------------------------------------
+
+
+@forge_app.callback(invoke_without_command=True)
+def forge_submit(
+    ctx: typer.Context,
+    concept: Optional[str] = typer.Argument(None, help="Product concept to forge"),
+    listen: bool = typer.Option(False, "--listen", help="Start the forge daemon"),
+    dashboard: bool = typer.Option(False, "--dashboard", help="Enable status dashboard (with --listen)"),
+) -> None:
+    """Submit an idea to forge, or start the daemon."""
+    if ctx.invoked_subcommand is not None:
+        return
+
+    if listen:
+        _forge_listen(dashboard)
+        return
+
+    if not concept:
+        error_console.print("[red]Error:[/red] Provide a concept or use --listen.")
+        raise typer.Exit(code=1)
+
+    from productteam.forge.queue import FileQueue
+
+    queue = FileQueue()
+    job = queue.enqueue(concept)
+    console.print(f"[green]Job submitted:[/green] {job.job_id}")
+    console.print(f"[dim]Concept: {concept}[/dim]")
+    console.print(f"\nRun [bold]productteam forge --listen[/bold] to process it.")
+
+
+def _forge_listen(with_dashboard: bool) -> None:
+    """Start the forge daemon."""
+    import asyncio
+
+    from productteam.config import find_config, load_config
+    from productteam.forge.daemon import ForgeDaemon
+    from productteam.forge.queue import FileQueue
+
+    config_path = find_config()
+    if config_path is None:
+        error_console.print(
+            "[yellow]No productteam.toml found.[/yellow] Using defaults."
+        )
+        from productteam.config import default_config
+        config = default_config()
+    else:
+        config = load_config(config_path)
+
+    queue = FileQueue()
+
+    if with_dashboard:
+        from productteam.forge.dashboard import serve_dashboard
+        port = config.forge.status_port
+        serve_dashboard(queue, port=port)
+        console.print(f"[green]Dashboard:[/green] http://127.0.0.1:{port}")
+
+    console.print("[bold]Forge daemon started.[/bold] Watching for jobs... (Ctrl+C to stop)")
+
+    daemon = ForgeDaemon(config=config, queue=queue)
+    try:
+        asyncio.run(daemon.run())
+    except KeyboardInterrupt:
+        daemon.stop()
+        console.print("\n[dim]Forge daemon stopped.[/dim]")
+
+
+@forge_app.command("status")
+def forge_status(
+    job_id: Optional[str] = typer.Argument(None, help="Job ID for detailed status"),
+) -> None:
+    """Show forge job status."""
+    from productteam.forge.queue import FileQueue
+
+    queue = FileQueue()
+
+    if job_id:
+        job = queue.get_job(job_id)
+        if job is None:
+            error_console.print(f"[red]Job not found:[/red] {job_id}")
+            raise typer.Exit(code=1)
+        data = job.to_dict()
+        for key, val in data.items():
+            console.print(f"  [bold]{key}:[/bold] {val}")
+        gate = queue.get_gate(job_id)
+        if gate:
+            console.print(f"\n  [yellow]Gate waiting:[/yellow] {gate.gate_name}")
+        return
+
+    jobs = queue.list_jobs()
+    if not jobs:
+        console.print("[dim]No forge jobs found.[/dim]")
+        return
+
+    table = Table(title="Forge Jobs", box=box.ROUNDED)
+    table.add_column("ID", style="bold")
+    table.add_column("Concept")
+    table.add_column("Status")
+    table.add_column("Stage")
+
+    status_styles = {
+        "queued": "dim",
+        "running": "cyan",
+        "waiting_gate": "yellow",
+        "complete": "green",
+        "failed": "red",
+    }
+    for job in jobs:
+        style = status_styles.get(job.status.value, "white")
+        table.add_row(
+            job.job_id,
+            job.concept[:40],
+            f"[{style}]{job.status.value}[/{style}]",
+            job.current_stage or "-",
+        )
+    console.print(table)
+
+
+@forge_app.command("approve")
+def forge_approve(
+    job_id: str = typer.Argument(..., help="Job ID to approve"),
+) -> None:
+    """Approve a gate for a forge job."""
+    from productteam.forge.queue import FileQueue
+
+    queue = FileQueue()
+    job = queue.get_job(job_id)
+    if job is None:
+        error_console.print(f"[red]Job not found:[/red] {job_id}")
+        raise typer.Exit(code=1)
+    queue.clear_gate(job_id)
+    console.print(f"[green]Approved:[/green] {job_id}")
+
+
+@forge_app.command("reject")
+def forge_reject(
+    job_id: str = typer.Argument(..., help="Job ID to reject"),
+) -> None:
+    """Reject a gate for a forge job."""
+    from productteam.forge.queue import FileQueue, JobStatus
+
+    queue = FileQueue()
+    job = queue.get_job(job_id)
+    if job is None:
+        error_console.print(f"[red]Job not found:[/red] {job_id}")
+        raise typer.Exit(code=1)
+    queue.update_status(job_id, JobStatus.FAILED, error="Rejected by user")
+    queue.append_log(job_id, "Job rejected by user.")
+    console.print(f"[red]Rejected:[/red] {job_id}")
+
+
+@forge_app.command("logs")
+def forge_logs(
+    job_id: str = typer.Argument(..., help="Job ID to view logs for"),
+    tail: int = typer.Option(50, "--tail", "-n", help="Number of lines to show"),
+) -> None:
+    """View logs for a forge job."""
+    from productteam.forge.queue import FileQueue
+
+    queue = FileQueue()
+    job = queue.get_job(job_id)
+    if job is None:
+        error_console.print(f"[red]Job not found:[/red] {job_id}")
+        raise typer.Exit(code=1)
+    log = queue.read_log(job_id, tail=tail)
+    if log:
+        console.print(log)
+    else:
+        console.print("[dim]No logs yet.[/dim]")
