@@ -340,3 +340,90 @@ def test_test_live_ollama_no_key_needed(tmp_path, monkeypatch):
     result = runner.invoke(app, ["test", "--live", "--provider", "ollama", "--dir", str(tmp_path)])
     # Should not fail on missing key — will fail at pytest execution instead
     assert "ANTHROPIC_API_KEY" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# recover command
+# ---------------------------------------------------------------------------
+
+
+def _write_state(tmp_path: Path, state: dict) -> None:
+    """Write a state.json for testing."""
+    import json as json_mod
+    state_path = tmp_path / ".productteam" / "state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json_mod.dumps(state, indent=2))
+
+
+def test_recover_no_state_file(tmp_path):
+    """recover exits with code 1 when no state.json exists."""
+    (tmp_path / ".productteam").mkdir(parents=True)
+    result = runner.invoke(app, ["recover", "--dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "No state.json" in result.output
+
+
+def test_recover_no_concept(tmp_path):
+    """recover exits with code 1 when state has no concept."""
+    _write_state(tmp_path, {"schema_version": 1, "concept": "", "stages": {}})
+    result = runner.invoke(app, ["recover", "--dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "No concept" in result.output
+
+
+def test_recover_no_stuck_stages(tmp_path):
+    """recover exits cleanly when no stages are stuck."""
+    _write_state(tmp_path, {
+        "schema_version": 1,
+        "concept": "test app",
+        "stages": {"prd": {"status": "complete"}},
+    })
+    result = runner.invoke(app, ["recover", "--dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "No stuck stages" in result.output
+
+
+def test_recover_identifies_stuck_stages(tmp_path):
+    """recover finds and reports stuck stages."""
+    _write_state(tmp_path, {
+        "schema_version": 1,
+        "concept": "test app",
+        "stages": {
+            "prd": {"status": "complete"},
+            "plan": {"status": "complete"},
+            "build": {"status": "stuck", "sprint": "sprint-001", "loop": 1},
+        },
+    })
+    result = runner.invoke(app, ["recover", "--dir", str(tmp_path)], input="n\n")
+    assert result.exit_code == 0
+    assert "build" in result.output
+    assert "stuck" in result.output
+    assert "sprint-001" in result.output
+    # Verify re-entry is AT the stuck stage, not after it
+    assert "resume from" in result.output.lower() or "Will resume" in result.output
+
+
+def test_recover_resets_state_with_yes(tmp_path):
+    """recover --yes resets stuck stages to pending without prompting."""
+    import json as json_mod
+
+    runner.invoke(app, ["init", str(tmp_path)])
+    _write_state(tmp_path, {
+        "schema_version": 1,
+        "concept": "test app",
+        "stages": {
+            "prd": {"status": "complete", "artifact": ".productteam/prds/prd-v1.md"},
+            "plan": {"status": "stuck"},
+        },
+    })
+
+    # --yes resets state but then fails trying to get a provider (no API key)
+    # That's fine — we're testing the state reset, not the pipeline run
+    result = runner.invoke(app, ["recover", "--yes", "--dir", str(tmp_path)])
+
+    # Check state was reset
+    state = json_mod.loads(
+        (tmp_path / ".productteam" / "state.json").read_text()
+    )
+    assert state["stages"]["plan"]["status"] == "pending"
+    assert state["stages"]["prd"]["status"] == "complete"

@@ -21,7 +21,11 @@ Read the PRD, feature request, or task description provided. If it references fi
 
 ### Step 2: Decompose into Deliverables
 
-Break the work into concrete deliverables. Each deliverable is a file or set of files with a clear purpose. For each deliverable, define:
+Break the work into concrete deliverables. **A deliverable is one file with one purpose** — not a subsystem, not a feature area, not a directory of related files. If you find yourself writing a deliverable that covers "the auth module" or "the API layer," you've gone too broad. Split it: one file = one deliverable.
+
+Each sprint should have **5-8 deliverables**. Fewer than 5 means the sprint is too thin to be useful. More than 8 means you're cramming a milestone into a sprint — split it.
+
+For each deliverable, define:
 
 - **file**: The exact file path to create or modify
 - **description**: What this file does (one sentence)
@@ -51,10 +55,119 @@ or 600 lines, split it into multiple sprints. A sprint is not a product version
 
 The Builder has a hard limit of 50 tool calls per sprint. Each file write costs
 2-3 tool calls (write + verify). That means a sprint can produce roughly 8-12
-files maximum. Plan accordingly.
+files maximum. Plan accordingly — **target 5-8 deliverables per sprint.**
 
-**Size limit:** If the sprint contract YAML exceeds 10KB, the sprint is too
+**Size limit:** If the sprint contract YAML exceeds 6KB, the sprint is too
 large and must be re-decomposed.
+
+### Examples of Correctly-Sized Sprints
+
+**Example 1 — small scope (CLI tool data layer):**
+```yaml
+sprint: 1
+title: "Core data models and config loader"
+source: "PRD: Task Tracker CLI"
+created: "2025-06-01"
+scope: small
+
+dependencies:
+  - pydantic>=2.0
+
+deliverables:
+  - file: src/models.py
+    description: "Pydantic models for Task, Project, and Config"
+    action: create
+    acceptance:
+      - "Task model has fields: id, title, status, created_at, updated_at"
+      - "Project model has fields: id, name, tasks (list of Task)"
+      - "All models round-trip through JSON without data loss"
+
+  - file: src/config.py
+    description: "Loads and validates config from ~/.tasktracker/config.toml"
+    action: create
+    acceptance:
+      - "Returns default Config when file is missing"
+      - "Raises ConfigError with path when TOML is malformed"
+
+  - file: tests/test_models.py
+    description: "Unit tests for data models"
+    action: create
+    acceptance:
+      - "Minimum 8 test cases covering creation, validation, serialization"
+      - "Tests run with pytest and all pass"
+
+constraints:
+  - "Use Pydantic v2 BaseModel"
+  - "Config uses tomllib (stdlib)"
+
+notes: |
+  This sprint sets up the data layer only. CLI commands and storage
+  are in sprint 2.
+```
+
+**Example 2 — medium scope (API endpoint with tests):**
+```yaml
+sprint: 3
+title: "User authentication endpoint"
+source: "PRD: SaaS Dashboard"
+created: "2025-06-01"
+scope: medium
+
+dependencies:
+  - fastapi
+  - passlib[bcrypt]
+  - python-jose[cryptography]
+
+deliverables:
+  - file: src/auth/router.py
+    description: "FastAPI router with /login and /register endpoints"
+    action: create
+    acceptance:
+      - "POST /register creates user and returns 201"
+      - "POST /login returns JWT token on valid credentials"
+      - "POST /login returns 401 on invalid credentials"
+
+  - file: src/auth/models.py
+    description: "Pydantic schemas for auth requests and responses"
+    action: create
+    acceptance:
+      - "UserCreate requires email and password fields"
+      - "TokenResponse contains access_token and token_type"
+
+  - file: src/auth/security.py
+    description: "Password hashing and JWT token creation/verification"
+    action: create
+    acceptance:
+      - "hash_password returns bcrypt hash"
+      - "verify_password returns True for correct password, False otherwise"
+      - "create_token returns a decodable JWT with sub and exp claims"
+
+  - file: src/auth/dependencies.py
+    description: "FastAPI dependency for extracting current user from JWT"
+    action: create
+    acceptance:
+      - "get_current_user raises HTTPException 401 on missing/invalid token"
+      - "Returns User object on valid token"
+
+  - file: tests/test_auth.py
+    description: "Tests for auth endpoints and security functions"
+    action: create
+    acceptance:
+      - "Minimum 10 test cases covering register, login, token validation"
+      - "Tests cover both happy path and error cases"
+      - "All tests pass with pytest"
+
+constraints:
+  - "Follow existing FastAPI router pattern in src/api/"
+  - "Use SQLAlchemy models already defined in src/db/models.py"
+
+notes: |
+  Sprint 2 created the database layer. This sprint adds auth on top.
+  The /me endpoint and role-based access come in sprint 4.
+```
+
+**Example 3 — what NOT to do (too large — do not imitate):**
+A sprint with 20+ deliverables covering "the entire API layer" or "all frontend components" is a milestone, not a sprint. Split by feature slice (auth, users, dashboard) not by technical layer (all models, all routes, all tests).
 
 ### Step 5: Write the Sprint Contract Files
 
@@ -126,7 +239,7 @@ deliverables, and acceptance criteria look right before the Builder starts.
 2. **Every acceptance criterion must be testable.** If the Evaluator can't verify it with a yes/no answer, rewrite it.
 3. **Be specific about file paths.** The Builder shouldn't have to guess where things go.
 4. **Reference existing patterns.** If the codebase already has a convention (e.g., specific framework for CLI, specific library for models), state it as a constraint.
-5. **Right-size every sprint.** A sprint is one feature or one layer — not a product version, not a milestone, not a roadmap phase. Each sprint must be completable in 30-40 tool calls (~8-12 files). If a PRD describes a large product, decompose into many small sprints, not a few large ones. A product with 40 files should have 6-8 sprints, not 2-3. Produce up to the number of sprints specified in the pipeline constraint. Note what was deferred in the final sprint's `notes` field.
+5. **Right-size every sprint: 5-8 deliverables, under 6KB YAML.** A sprint is one feature slice — not a product version, not a milestone, not a roadmap phase, not an entire technical layer. Each sprint must be completable in 30-40 tool calls. If a PRD describes a large product, decompose into many small sprints, not a few large ones. A product with 40 files should have 6-8 sprints of 5-8 deliverables each. Produce up to the number of sprints specified in the pipeline constraint. Note what was deferred in the final sprint's `notes` field. **If a sprint has more than 8 deliverables, it MUST be split.** See the examples above.
 6. **Number sprints sequentially.** Use `list_dir` to check `.productteam/sprints/` for existing sprint files and use the next available number. Write each sprint as its own `.yaml` file using `write_file`. Never combine multiple sprints into one file.
 7. **Release sprints MUST include documentation and publishing.** When a sprint produces shippable code, the deliverables MUST include: README updates (test counts, new features, fixes), documentation updates, and any publishing steps. Code without updated docs is not shippable.
 8. **Docs deliverables are testable.** Acceptance criteria for docs include: "README reflects current test count", "Install commands are correct", "No placeholder URLs remain".

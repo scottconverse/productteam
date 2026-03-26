@@ -19,7 +19,7 @@ class PipelineConfig(BaseModel):
     stage_timeout_seconds: int = 300
     planner_timeout_seconds: int = 600
     builder_timeout_seconds: int = 600
-    builder_max_tool_calls: int = 50
+    builder_max_tool_calls: int = 75
     auto_approve: bool = False
 
 

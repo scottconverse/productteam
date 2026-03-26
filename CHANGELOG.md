@@ -1,12 +1,35 @@
 # Changelog
 
+## [2.2.0] - 2026-03-26
+
+### Added
+- **`productteam recover` command** — reads state.json, identifies stuck/running stages, resets them to pending, re-enters pipeline at the stuck stage. Supports `--yes` for non-interactive use. Replaces manual state.json editing after timeouts.
+- **Planner sprint sizing examples** — SKILL.md now includes 2 concrete examples of correctly-sized sprints (small + medium) and an anti-pattern example. Establishes 5-8 deliverable floor/ceiling per sprint.
+- **Verdict parsing disk fallback** — when the Evaluator's text response has no parseable verdict, the supervisor checks `.productteam/evaluations/*.yaml` files written by the Evaluator via write_file. Prevents every sprint returning needs_work when the Evaluator writes structured YAML to disk but its text summary lacks the verdict key. **Note:** This bug existed since the Evaluator became a doer stage in v2.1.0. Any evaluation verdicts from live runs prior to this fix are unreliable — the Evaluator may have written PASS to disk while the supervisor recorded needs_work.
+- **Builder tool budget guidance** — SKILL.md now includes explicit budget: write all files first, test once, then fix. Prevents the Builder from spending all tool calls on exploration.
+
+### Changed
+- `builder_max_tool_calls` default raised from 50 to 75 — 50 was too tight for real sprints with test-fix cycles
+- Planner YAML size limit tightened from 10KB to 6KB
+- Planner deliverable definition tightened: "one file with one purpose" — not a subsystem or feature area
+- `run_bash` tool description updated: tells the model Python/pip are available on PATH
+
+### Fixed
+- **`run_bash` Python PATH injection** — Python executable directory and project `.venv/Scripts` (or `bin` on Linux/macOS) added to subprocess PATH. Fixes Windows environments where bash shells (MSYS2/Git Bash) can't find Python. Cross-platform safe.
+- Inline `import sys` in tool_loop.py moved to module level
+
+### Infrastructure
+- 231 unit tests + 6 live integration tests passing
+- Verdict disk fallback covered by `test_build_evaluate_disk_fallback_finds_pass`
+- Recover command covered by 5 tests (no state, no concept, no stuck, identifies stuck, resets with --yes)
+
 ## [2.1.0] - 2026-03-26
 
 ### Changed
 - **Planner reclassified as doer** — now uses the tool loop to write sprint YAML files directly to `.productteam/sprints/` via `write_file`. Previously a thinker that produced correct YAML as text but couldn't write to disk, causing the build loop to silently skip.
 - **PRD Writer runs headlessly** — detects automated context and skips clarifying questions and review phases. Applies sensible defaults instead of asking 7 questions nobody will answer.
 - **Planner runs headlessly** — proceeds without asking for human confirmation in auto-approve mode.
-- **Sprint scoping tightened** — "large" scope banned, only small (1-3 files) and medium (4-8 files) allowed. Sprints must be completable in 30-40 tool calls. 10KB YAML size limit.
+- **Sprint scoping tightened** — "large" scope banned, only small (1-3 files) and medium (4-8 files) allowed. Sprints must be completable in 30-40 tool calls. 6KB YAML size limit.
 - **Design Evaluator** — single-pass evaluation with clear escalation instead of fake retry loop that couldn't route back to Doc Writer.
 - Timeout defaults bumped: stage 120→300s, builder 300→600s, new `planner_timeout_seconds` (600s)
 - `_run_tool_loop_stage` accepts optional `timeout_seconds` override
@@ -36,7 +59,7 @@
 ### Infrastructure
 - Publish workflow runs tests before build (pytest gate)
 - Test workflow adds `--cov --cov-fail-under=80` and Python 3.13
-- 225 unit tests + 6 live integration tests passing
+- 231 unit tests + 6 live integration tests passing
 
 ### Known Issues
 - Planner sprint sizing needs calibration — produces 9-15KB sprints with 20-31 deliverables; target is 5-8 deliverables under 6KB. Tracked for next session.

@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from productteam.providers.base import LLMProvider
@@ -46,7 +47,7 @@ BUILDER_TOOLS = [
     },
     {
         "name": "run_bash",
-        "description": "Run a shell command in the project directory. Returns stdout, stderr, and exit code.",
+        "description": "Run a shell command in the project directory. Returns stdout, stderr, and exit code. Python and pip are available on PATH — use 'python' and 'pip' directly (do NOT search for them).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -202,6 +203,18 @@ def _execute_tool(
         if cmd_error:
             return json.dumps({"error": cmd_error})
         try:
+            # Ensure Python is on PATH for the subprocess.
+            # On Windows (MSYS2/Git Bash), the system Python often isn't on
+            # the bash shell's PATH. On Linux/macOS this is typically a no-op
+            # since /usr/bin is already in PATH. Cross-platform safe: uses
+            # os.pathsep and conditional venv dir name.
+            env = os.environ.copy()
+            python_dir = str(Path(sys.executable).parent)
+            env["PATH"] = python_dir + os.pathsep + env.get("PATH", "")
+            venv_scripts = project_dir / ".venv" / ("Scripts" if os.name == "nt" else "bin")
+            if venv_scripts.exists():
+                env["PATH"] = str(venv_scripts) + os.pathsep + env["PATH"]
+
             result = subprocess.run(
                 command,
                 shell=True,
@@ -209,6 +222,7 @@ def _execute_tool(
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                env=env,
             )
             return json.dumps({
                 "stdout": result.stdout[-4000:] if len(result.stdout) > 4000 else result.stdout,

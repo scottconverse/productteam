@@ -380,6 +380,181 @@ def run_cmd(
 
 
 # ---------------------------------------------------------------------------
+# productteam recover
+# ---------------------------------------------------------------------------
+
+
+# Pipeline stage ordering — used by recover to find the resume point
+_STAGE_ORDER = ["prd", "plan", "build", "evaluate", "document", "evaluate-design", "ship"]
+
+
+@app.command("recover")
+def recover_cmd(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Resume immediately without confirmation"),
+    directory: Optional[Path] = typer.Option(
+        None, "--dir", "-d", help="Project directory (default: current directory)"
+    ),
+) -> None:
+    """Recover a stuck pipeline and resume from the last completed stage.
+
+    Reads state.json, identifies stuck/running stages, resets them to pending,
+    and re-runs from the stuck stage. The stuck stage is always re-executed
+    because a timeout or crash typically means incomplete output (e.g. the
+    Planner wrote some sprint files but not all).
+
+    If the stuck stage already produced valid artifacts and you don't want them
+    overwritten, use 'productteam run' instead — it skips stages marked complete.
+    Use 'productteam run --rebuild' for a full clean re-run of a stage.
+    """
+    import asyncio
+
+    target = (directory or Path.cwd()).resolve()
+    state_path = target / ".productteam" / "state.json"
+
+    if not state_path.exists():
+        error_console.print(
+            "[red]Error:[/red] No state.json found. "
+            "Nothing to recover. Run [bold]'productteam run'[/bold] first."
+        )
+        raise typer.Exit(code=1)
+
+    import json as json_mod
+
+    state = json_mod.loads(state_path.read_text(encoding="utf-8"))
+    stages = state.get("stages", {})
+    concept = state.get("concept", "")
+
+    if not concept:
+        error_console.print("[red]Error:[/red] No concept in state.json. Nothing to recover.")
+        raise typer.Exit(code=1)
+
+    # Find stuck/running stages and the last completed stage
+    stuck_stages = []
+    completed_stages = []
+    for name, info in stages.items():
+        status = info.get("status", "")
+        if status in ("stuck", "running", "needs_work", "max_calls"):
+            stuck_stages.append((name, status))
+        elif status == "complete":
+            completed_stages.append(name)
+
+    if not stuck_stages:
+        console.print("[green]No stuck stages found.[/green] Pipeline state looks clean.")
+        console.print("[dim]Use 'productteam run' to continue the pipeline.[/dim]")
+        raise typer.Exit(code=0)
+
+    # Determine resume point
+    # The resume stage is the first stuck stage in pipeline order
+    resume_stage = None
+    for stage_name in _STAGE_ORDER:
+        for stuck_name, _ in stuck_stages:
+            # Handle both "build" and "build:sprint-001" style keys
+            base = stuck_name.split(":")[0]
+            if base == stage_name:
+                resume_stage = stage_name
+                break
+        if resume_stage:
+            break
+
+    if not resume_stage:
+        # Fallback: just use the first stuck stage
+        resume_stage = stuck_stages[0][0].split(":")[0]
+
+    # Find sprint context for build/evaluate recovery
+    resume_sprint = None
+    for stuck_name, _ in stuck_stages:
+        info = stages.get(stuck_name, {})
+        if info.get("sprint"):
+            resume_sprint = info["sprint"]
+            break
+
+    # Report what we found
+    console.print(f"\n[bold]Pipeline Recovery[/bold]")
+    console.print(f"  Concept: [dim]{concept[:80]}[/dim]")
+    console.print(f"  Completed stages: [green]{', '.join(completed_stages) or 'none'}[/green]")
+    console.print(f"  Stuck stages:")
+    for name, status in stuck_stages:
+        console.print(f"    [red]{name}[/red]: {status}")
+
+    console.print(f"\n  [bold]Will resume from:[/bold] [cyan]{resume_stage}[/cyan]"
+                  + (f" (sprint: {resume_sprint})" if resume_sprint else ""))
+
+    # What recovery will do
+    console.print(f"\n  Recovery actions:")
+    for stuck_name, _ in stuck_stages:
+        console.print(f"    Reset [red]{stuck_name}[/red] → pending")
+
+    if not yes:
+        from rich.prompt import Prompt
+        choice = Prompt.ask("\nProceed with recovery?", choices=["y", "n"], default="y")
+        if choice != "y":
+            console.print("[yellow]Recovery cancelled.[/yellow]")
+            raise typer.Exit(code=0)
+
+    # Reset stuck stages
+    for stuck_name, _ in stuck_stages:
+        stages[stuck_name]["status"] = "pending"
+    state["stages"] = stages
+    state["updated_at"] = ""  # will be set by _save_state
+    state_path.write_text(json_mod.dumps(state, indent=2), encoding="utf-8")
+    console.print("[green]State reset.[/green]")
+
+    # Re-enter pipeline
+    from productteam.config import load_config
+    from productteam.providers.factory import get_provider
+    from productteam.supervisor import Supervisor
+
+    config_path = target / "productteam.toml"
+    if not config_path.exists():
+        error_console.print("[red]Error:[/red] productteam.toml not found.")
+        raise typer.Exit(code=1)
+
+    config = load_config(config_path)
+
+    try:
+        provider = get_provider(
+            provider=config.pipeline.provider,
+            model=config.pipeline.model,
+            api_base=config.pipeline.api_base,
+        )
+    except Exception as exc:
+        error_console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    console.print(
+        f"\n[bold]Resuming pipeline[/bold] "
+        f"[dim](from: {resume_stage})[/dim]"
+    )
+
+    # Use --step for build/evaluate recovery with sprint context,
+    # otherwise let the full pipeline handle it (it skips completed stages)
+    supervisor = Supervisor(
+        project_dir=target,
+        config=config,
+        provider=provider,
+        auto_approve=True,
+    )
+
+    if resume_stage in ("build", "evaluate") and resume_sprint:
+        result = asyncio.run(
+            supervisor.run(step=resume_stage, sprint=resume_sprint)
+        )
+    else:
+        result = asyncio.run(supervisor.run())
+
+    if result.status == "complete":
+        console.print("\n[bold green]Pipeline recovered and completed.[/bold green]")
+    elif result.status == "partial":
+        console.print("\n[yellow]Pipeline paused at gate. Run again to continue.[/yellow]")
+    elif result.status == "stuck":
+        console.print("\n[red]Pipeline stuck again. Check the output above.[/red]")
+        raise typer.Exit(code=1)
+    elif result.status == "failed":
+        console.print("\n[red]Pipeline failed.[/red]")
+        raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
 # productteam test
 # ---------------------------------------------------------------------------
 

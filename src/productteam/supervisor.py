@@ -580,8 +580,31 @@ class Supervisor:
             eval_path.parent.mkdir(parents=True, exist_ok=True)
             eval_path.write_text(eval_response, encoding="utf-8")
 
-            # Check verdict
+            # Check verdict — try the model's text response first,
+            # then check eval YAML files the Evaluator wrote via write_file
             verdict = self._parse_verdict(eval_response)
+            if verdict == "needs_work":
+                # The Evaluator may have written a structured YAML via write_file
+                # that has a clearer verdict than its text response
+                eval_dir = self.project_dir / ".productteam" / "evaluations"
+                # Check files the Evaluator wrote via write_file (eval-NNN.yaml)
+                # Scope to the current sprint number to avoid cross-sprint leaks
+                sprint_num = sprint_name.split("-")[-1]  # "001" from "sprint-001"
+                candidates = list(eval_dir.glob(f"eval-{sprint_num}*.yaml"))
+                # Also check supervisor-written files for this sprint
+                candidates += list(eval_dir.glob(f"{sprint_name}-eval-*.yaml"))
+                # Exclude the file we just wrote (it has the same text we already parsed)
+                candidates = [f for f in candidates if f != eval_path]
+                for eval_file in sorted(candidates, reverse=True):
+                    try:
+                        file_content = eval_file.read_text(encoding="utf-8")
+                        file_verdict = self._parse_verdict(file_content)
+                        if file_verdict in ("pass", "fail"):
+                            verdict = file_verdict
+                            console.print(f"  [dim](verdict from {eval_file.name})[/dim]")
+                            break
+                    except Exception:
+                        continue
             console.print(f"  Verdict: [{'green' if verdict == 'pass' else 'red'}]{verdict}[/]")
 
             if verdict == "pass":

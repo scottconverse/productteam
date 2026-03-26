@@ -15,7 +15,7 @@
   <rect width="1080" height="820" fill="#0e1117" rx="12"/>
 
   <!-- Title -->
-  <text x="540" y="40" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">ProductTeam v2.1.0 Architecture</text>
+  <text x="540" y="40" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">ProductTeam v2.2.0 Architecture</text>
 
   <!-- ═══════════════════════════════════════════════════ -->
   <!-- USER INPUT layer -->
@@ -35,9 +35,13 @@
   <rect x="490" y="90" width="200" height="30" rx="4" fill="#0e1117" stroke="#58a6ff"/>
   <text x="590" y="110" text-anchor="middle" fill="#58a6ff" font-size="12" font-family="'SF Mono', monospace">productteam doctor</text>
 
+  <!-- Recover box -->
+  <rect x="710" y="90" width="170" height="30" rx="4" fill="#0e1117" stroke="#58a6ff"/>
+  <text x="795" y="110" text-anchor="middle" fill="#58a6ff" font-size="12" font-family="'SF Mono', monospace">productteam recover</text>
+
   <!-- Config box -->
-  <rect x="710" y="90" width="200" height="30" rx="4" fill="#0e1117" stroke="#30363d"/>
-  <text x="810" y="110" text-anchor="middle" fill="#8b949e" font-size="12" font-family="'SF Mono', monospace">productteam config</text>
+  <rect x="895" y="90" width="145" height="30" rx="4" fill="#0e1117" stroke="#30363d"/>
+  <text x="967" y="110" text-anchor="middle" fill="#8b949e" font-size="12" font-family="'SF Mono', monospace">productteam config</text>
 
   <!-- Arrow from CLI to Supervisor -->
   <line x1="150" y1="130" x2="150" y2="165" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
@@ -109,7 +113,7 @@
   <rect x="415" y="335" width="130" height="75" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
   <text x="480" y="358" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">Builder</text>
   <text x="480" y="375" text-anchor="middle" fill="#8b949e" font-size="9">sprint → code</text>
-  <text x="480" y="390" text-anchor="middle" fill="#8b949e" font-size="9">max 50 tool calls</text>
+  <text x="480" y="390" text-anchor="middle" fill="#8b949e" font-size="9">max 75 tool calls</text>
   <text x="480" y="403" text-anchor="middle" fill="#8b949e" font-size="9">path + cmd security</text>
 
   <!-- UI Builder -->

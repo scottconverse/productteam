@@ -29,6 +29,9 @@ productteam run "a CLI tool that estimates LLM API costs"
 # Or resume from where you left off
 productteam run
 
+# Recover a stuck pipeline (timeout, crash, etc.)
+productteam recover
+
 # Check your environment
 productteam doctor
 ```
@@ -88,7 +91,7 @@ The agentic runtime for all doer stages (Builder, UI Builder, Evaluator, Doc Wri
 - **`run_bash`** — Run a shell command with timeout. Blocks access to `.ssh/`, `.aws/`, credential paths.
 - **`list_dir`** — List directory contents with `[FILE]` and `[DIR]` prefixes.
 
-The loop calls the LLM, executes any tool calls, sends results back, and repeats until the LLM stops calling tools. Safety: path validation rejects traversal and absolute paths. Command validation blocks credential-adjacent paths. Loop detection catches identical tool+args called 3 times consecutively. Max 50 tool calls per run (configurable).
+The loop calls the LLM, executes any tool calls, sends results back, and repeats until the LLM stops calling tools. Safety: path validation rejects traversal and absolute paths. Command validation blocks credential-adjacent paths. Loop detection catches identical tool+args called 3 times consecutively. Max 75 tool calls per run (configurable). Python is automatically added to the subprocess PATH on all platforms.
 
 ### Forge (`forge/`)
 
@@ -108,7 +111,7 @@ Abstract `LLMProvider` with `complete()` (thinkers) and `complete_with_tools()` 
 
 ### State (`state.json`)
 
-Written by the Supervisor on every state change. Records pipeline phase, completed stages, current sprint, loop iteration, timestamps. `productteam run` without a concept reads this and resumes. Passed sprints are skipped. `--rebuild` forces full rebuild.
+Written by the Supervisor on every state change. Records pipeline phase, completed stages, current sprint, loop iteration, timestamps. `productteam run` without a concept reads this and resumes. Passed sprints are skipped. `--rebuild` forces full rebuild. If a stage gets stuck (timeout, crash), `productteam recover` resets it to pending and re-enters the pipeline.
 
 ## CLI Reference
 
@@ -159,6 +162,22 @@ Examples:
   productteam status
   productteam status ./my-project
 ```
+
+### `productteam recover [OPTIONS]`
+
+Recover a stuck pipeline. Reads `state.json`, identifies stuck or running stages, resets them to pending, and re-runs from the stuck stage.
+
+```
+Options:
+  --yes, -y    Resume immediately without confirmation
+  --dir, -d    Project directory
+
+Examples:
+  productteam recover              # interactive: shows what's stuck, asks to confirm
+  productteam recover --yes        # non-interactive: reset and re-run immediately
+```
+
+The stuck stage is always re-executed (safe default for timeouts with incomplete output). If the stuck stage already produced valid artifacts and you don't want them overwritten, use `productteam run` instead — it skips stages marked complete. Use `productteam run --rebuild` for a full clean re-run.
 
 ### `productteam doctor`
 
@@ -321,7 +340,7 @@ require_design_review = true
 stage_timeout_seconds = 300     # thinker stages (PRD Writer, Design Evaluator)
 planner_timeout_seconds = 600   # Planner may write many sprint YAML files
 builder_timeout_seconds = 600   # doer stages (Builder, Evaluator, Doc Writer)
-builder_max_tool_calls = 50     # tool call limit per doer run
+builder_max_tool_calls = 75     # tool call limit per doer run
 
 # Increase these on slow connections or large products.
 # Claude Sonnet on a complex 8-sprint plan easily takes 5+ minutes.

@@ -402,6 +402,97 @@ def test_parse_verdict_defaults_to_needs_work(tmp_path):
     assert supervisor._parse_verdict("No structured output at all.") == "needs_work"
 
 
+@pytest.mark.asyncio
+async def test_build_evaluate_disk_fallback_finds_pass(tmp_path):
+    """Verdict fallback reads PASS from eval YAML on disk when text has no verdict.
+
+    The Evaluator writes structured YAML via write_file tool, but its final
+    text response is a narrative summary with no parseable verdict key.
+    The supervisor must check .productteam/evaluations/*.yaml on disk.
+    """
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
+        "sprint: 1\ntitle: Test\n"
+    )
+
+    # Pre-plant an eval YAML that the Evaluator "wrote via write_file"
+    # The Evaluator names its files eval-NNN.yaml (sprint number, not "sprint-NNN")
+    eval_dir = tmp_path / ".productteam" / "evaluations"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+    (eval_dir / "eval-001.yaml").write_text(
+        "sprint: 1\nevaluator_verdict: PASS\ntest_results:\n  total: 10\n  passed: 10\n"
+    )
+
+    config = _make_config()
+    mock_provider = AsyncMock()
+
+    # Builder text-only response, then evaluator text with NO parseable verdict
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Build complete."),
+        _eval_response("All 10 acceptance criteria met. Sprint is ready to ship."),
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor._build_evaluate_loop("sprint-001")
+
+    assert result.status == "complete", (
+        f"Expected 'complete' but got '{result.status}'. "
+        "Disk fallback failed to read verdict from eval YAML."
+    )
+    # Verify state was saved correctly
+    state = supervisor.state
+    assert state["stages"].get("build:sprint-001", {}).get("status") == "passed"
+
+
+@pytest.mark.asyncio
+async def test_disk_fallback_does_not_cross_sprint_boundaries(tmp_path):
+    """Sprint-002 must NOT inherit sprint-001's PASS verdict from disk.
+
+    Regression test: the original fallback glob'd all *.yaml files and found
+    sprint-001's PASS when evaluating sprint-002, silently passing broken code.
+    """
+    _init_project(tmp_path)
+    sprints_dir = tmp_path / ".productteam" / "sprints"
+    sprints_dir.mkdir(parents=True, exist_ok=True)
+    (sprints_dir / "sprint-001.yaml").write_text("sprint: 1\ntitle: Done\n")
+    (sprints_dir / "sprint-002.yaml").write_text("sprint: 2\ntitle: Docs\n")
+
+    # Sprint-001 passed — its eval file is on disk
+    eval_dir = tmp_path / ".productteam" / "evaluations"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+    (eval_dir / "eval-001.yaml").write_text(
+        "sprint: 1\nevaluator_verdict: PASS\ntest_results:\n  total: 10\n  passed: 10\n"
+    )
+    # Sprint-002 has NO eval file on disk — evaluator only wrote narrative text
+
+    config = _make_config()
+    mock_provider = AsyncMock()
+
+    # Builder and evaluator both return text-only (no tool calls, no verdict key)
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response("Build complete."),
+        _eval_response("Several acceptance criteria failed. Needs work."),
+        # Loop 2: still no verdict
+        _eval_response("Applied fixes."),
+        _eval_response("Two criteria still failing."),
+        # Loop 3: still no verdict
+        _eval_response("More fixes."),
+        _eval_response("Still not ready."),
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    # Mark sprint-001 as already passed so the loop targets sprint-002
+    supervisor.state["stages"]["build:sprint-001"] = {"status": "passed"}
+    result = await supervisor._build_evaluate_loop("sprint-002")
+
+    # Sprint-002 should NOT have passed — it had no PASS verdict of its own
+    state = supervisor.state
+    sprint_002_status = state["stages"].get("build:sprint-002", {}).get("status", "")
+    assert sprint_002_status != "passed", (
+        "Sprint-002 should not pass — the fallback must not read sprint-001's eval file"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Context summarization tests
 # ---------------------------------------------------------------------------

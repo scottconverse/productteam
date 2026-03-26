@@ -204,7 +204,7 @@ Write all files to the correct locations:
 - `docs/terms.html` — Terms of service (always produce this)
 - `CHANGELOG.md` — Project root
 
-Report what was created and any discrepancies found between PRD and actual code.
+Report what was created and any discrepancies found between PRD and actual code. **This is your final action.** After writing all files and printing the summary, stop. Do not make additional tool calls after the summary. Do not re-read files you already wrote. Do not start a second pass. Your work is done when all files are written and the report is printed.
 
 #### Terms of Service (`docs/terms.html`)
 

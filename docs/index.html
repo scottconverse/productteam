@@ -571,7 +571,7 @@
           <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Orchestration</span>
         </div>
         <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">The brain of the system. When you run <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam run "concept"</code>, the Supervisor takes over. It reads your config, loads pipeline state from <code style="color:var(--green);font-family:var(--mono);font-size:13px;">state.json</code>, and launches each stage in sequence.</p>
-        <p style="color:var(--muted);font-size:13px;line-height:1.6;">It enforces three approval gates (PRD, Sprint, Ship) where it pauses for your input. Between gates, it runs autonomously. It manages the build-evaluate loop: Builder produces code, Evaluator grades it, and if the verdict is NEEDS_WORK, the Supervisor feeds the feedback back to the Builder and loops (max 3 times). If an agent gets stuck (timeout, infinite loop, max tool calls), the Supervisor detects it and escalates to you with full context. On every state change, it writes <code style="color:var(--green);font-family:var(--mono);font-size:13px;">state.json</code> so you can resume later with just <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam run</code>.</p>
+        <p style="color:var(--muted);font-size:13px;line-height:1.6;">It enforces three approval gates (PRD, Sprint, Ship) where it pauses for your input. Between gates, it runs autonomously. It manages the build-evaluate loop: Builder produces code, Evaluator grades it, and if the verdict is NEEDS_WORK, the Supervisor feeds the feedback back to the Builder and loops (max 3 times). If an agent gets stuck (timeout, infinite loop, max tool calls), the Supervisor detects it and escalates to you with full context. On every state change, it writes <code style="color:var(--green);font-family:var(--mono);font-size:13px;">state.json</code> so you can resume later with just <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam run</code>. If a stage gets stuck, <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam recover</code> resets it and re-enters the pipeline.</p>
       </div>
 
       <!-- Thinker/Doer split -->
@@ -765,6 +765,7 @@
         <span class="comment"># Run the pipeline</span><br>
         <span class="cmd">productteam run "concept"</span><br>
         <span class="cmd">productteam run</span> <span class="comment"># resume</span><br>
+        <span class="cmd">productteam recover</span> <span class="comment"># unstick</span><br>
         <span class="cmd">productteam run --auto-approve</span>
       </div>
       <div class="install-block" style="margin:0;">
