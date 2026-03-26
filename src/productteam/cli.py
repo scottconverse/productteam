@@ -42,6 +42,54 @@ def version_cmd() -> None:
 
 
 # ---------------------------------------------------------------------------
+# productteam doctor
+# ---------------------------------------------------------------------------
+
+
+@app.command("doctor")
+def doctor_cmd(
+    no_network: bool = typer.Option(False, "--no-network", help="Skip API reachability checks"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    directory: Optional[Path] = typer.Option(
+        None, "--dir", "-d", help="Project directory (default: current directory)"
+    ),
+) -> None:
+    """Check ProductTeam environment and configuration."""
+    import json
+
+    from productteam.doctor import run_doctor, thinker_doer_note
+
+    target = (directory or Path.cwd()).resolve()
+    results, exit_code = run_doctor(target, no_network=no_network)
+
+    if json_output:
+        data = [r.to_dict() for r in results]
+        console.print(json.dumps(data, indent=2))
+        raise typer.Exit(code=exit_code)
+
+    console.print("\n[bold]Checking ProductTeam environment...[/bold]\n")
+
+    for r in results:
+        if r.passed:
+            icon = "[green][check][/green]" if r.severity != "info" else "[blue][i][/blue]"
+            console.print(f"  {icon} {r.message}")
+        else:
+            if r.severity == "warning":
+                console.print(f"  [yellow][ ][/yellow] {r.message}")
+            else:
+                console.print(f"  [red][X][/red] {r.message}")
+
+    console.print(f"\n[dim]{thinker_doer_note()}[/dim]")
+
+    if exit_code == 0:
+        console.print("\n[bold green]All checks passed. ProductTeam is ready.[/bold green]")
+    else:
+        console.print("\n[bold red]Some checks failed. Fix the issues above.[/bold red]")
+
+    raise typer.Exit(code=exit_code)
+
+
+# ---------------------------------------------------------------------------
 # productteam init
 # ---------------------------------------------------------------------------
 

@@ -146,6 +146,9 @@ def read_project_state(target_dir: Path) -> dict:
     """
     Read the .productteam/ directory and return structured state info.
 
+    Reads from state.json first if available (v2.0 format), falls back
+    to directory scan for backwards compatibility.
+
     Returns:
       {
         "initialized": bool,
@@ -165,13 +168,33 @@ def read_project_state(target_dir: Path) -> dict:
     if not pt_dir.exists():
         return state
 
-    # Sprints
+    # Try state.json first (v2.0 format)
+    state_json = pt_dir / "state.json"
+    if state_json.exists():
+        try:
+            import json
+            data = json.loads(state_json.read_text(encoding="utf-8"))
+            state["pipeline_phase"] = data.get("pipeline_phase", "planning")
+            # Extract sprint statuses from stages
+            stages = data.get("stages", {})
+            for key, info in stages.items():
+                if key.startswith("build:"):
+                    sprint_name = key.split(":", 1)[1]
+                    status = "passed" if info.get("status") == "passed" else "building"
+                    state["sprints"].append({"name": sprint_name, "status": status})
+        except Exception:
+            pass  # Fall through to directory scan
+
+    # Directory scan fallback (also supplements state.json data)
     sprints_dir = pt_dir / "sprints"
     if sprints_dir.exists():
+        existing_names = {s["name"] for s in state["sprints"]}
         for item in sorted(sprints_dir.iterdir()):
-            if item.is_dir():
+            if item.is_dir() and item.name not in existing_names:
                 status = get_sprint_status(item)
                 state["sprints"].append({"name": item.name, "status": status})
+            elif item.is_file() and item.suffix in (".yaml", ".yml") and item.stem not in existing_names:
+                state["sprints"].append({"name": item.stem, "status": "planned"})
 
     # Evaluations
     evals_dir = pt_dir / "evaluations"
@@ -181,8 +204,9 @@ def read_project_state(target_dir: Path) -> dict:
                 verdict = _read_verdict(item)
                 state["evaluations"].append({"name": item.stem, "verdict": verdict})
 
-    # Determine overall pipeline phase
-    state["pipeline_phase"] = _determine_pipeline_phase(state)
+    # Determine overall pipeline phase (directory scan may override state.json)
+    if not state_json.exists():
+        state["pipeline_phase"] = _determine_pipeline_phase(state)
 
     return state
 
