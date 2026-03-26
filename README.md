@@ -96,7 +96,7 @@ Three components for headless pipeline execution:
 
 - **Queue** (`queue.py`) — File-based at `~/.productteam/forge/queue/`. Each job is a directory with `job.json`, `gate.json`, and `log.txt`. Zero infrastructure.
 - **Daemon** (`daemon.py`) — Polls queue every 10 seconds. Creates a project, runs init, starts Supervisor with auto-approve. At gates, writes `gate.json` and sends webhook/Slack notifications.
-- **Dashboard** (`dashboard.py`) — Stdlib `http.server` at `http://127.0.0.1:7654`. Job table, live log tailing, approve/reject buttons. No framework, no build step.
+- **Dashboard** (`dashboard.py`) — Stdlib `http.server` at `http://0.0.0.0:7654` (LAN-accessible by default). Job table, live log tailing, approve/reject buttons, and a **submit form** — type an idea and hit "Forge it" from any device on your network. No framework, no build step. The CLI prints your local IP so you know the URL to use from your phone.
 
 ### Provider Layer (`providers/`)
 
@@ -207,11 +207,19 @@ Start the Forge daemon. Watches for queued jobs and runs them headlessly.
 
 ```
 Options:
-  --dashboard    Enable the status dashboard at http://127.0.0.1:7654
+  --dashboard    Enable the status dashboard (default: http://0.0.0.0:7654)
 
 Examples:
   productteam forge --listen
   productteam forge --listen --dashboard
+
+The dashboard is accessible from any device on your local network. When it
+starts, the CLI prints both the localhost URL and your LAN IP:
+
+  Dashboard: http://localhost:7654
+  From phone: http://192.168.1.42:7654
+
+Open that URL on your phone to submit ideas, check status, and approve gates.
 ```
 
 ### `productteam forge status [JOB-ID]`
@@ -240,17 +248,23 @@ Options:
 Forge is how you use ProductTeam from your phone. Submit an idea from anywhere. It comes back a product.
 
 ```bash
-# Submit from your phone (via Dispatch, CLI, or GitHub Issue)
-productteam forge "An app that tracks local ballot measures"
-# Job ID: a1b2c3d4
-
-# On your machine, start the daemon
+# On your machine, start the daemon with the dashboard
 productteam forge --listen --dashboard
+# Dashboard: http://localhost:7654
+# From phone: http://192.168.1.42:7654
+```
 
+**Three ways to submit ideas:**
+
+1. **From your phone's browser** — Open `http://<your-ip>:7654`, type your idea in the submit form, hit "Forge it"
+2. **From the CLI** — `productteam forge "An app that tracks local ballot measures"`
+3. **From GitHub** — Create an issue with the `productteam-forge` label (requires `github_issues` queue backend)
+
+```bash
 # Check status from anywhere
 productteam forge status a1b2c3d4
 
-# Approve gates when notified
+# Approve gates when notified (or use the dashboard buttons)
 productteam forge approve a1b2c3d4
 ```
 
@@ -294,6 +308,7 @@ enabled = false
 queue_backend = "file"          # file | github_issues
 notification_backend = "none"   # none | webhook | slack
 notification_url = ""
+status_host = "0.0.0.0"        # "127.0.0.1" for localhost only
 status_port = 7654
 github_repo = ""
 poll_interval_seconds = 10
