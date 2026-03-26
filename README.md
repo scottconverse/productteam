@@ -61,15 +61,15 @@ This is the core design decision. Stages split into two types:
 |-------|------|-------------|
 | PRD Writer | Thinker | Single LLM call, structured text output |
 | Planner | Thinker | Single LLM call, structured text output |
-| Evaluator | Thinker | Single LLM call, structured text output |
 | Design Evaluator | Thinker | Single LLM call, structured text output |
-| Doc Writer | Thinker | Single LLM call, structured text output |
 | **Builder** | **Doer** | **Tool-use loop** (read/write files, run commands) |
 | **UI Builder** | **Doer** | **Tool-use loop** (read/write files, run commands) |
+| **Evaluator** | **Doer** | **Tool-use loop** (reads code, runs tests, grades) |
+| **Doc Writer** | **Doer** | **Tool-use loop** (reads source, writes docs) |
 
-**Thinker stages** support all configured providers (Anthropic, OpenAI, Ollama, Gemini).
+**Thinker stages** support all configured providers (Anthropic, OpenAI, Ollama, Gemini). Single `provider.complete()` call — context in, text artifact out.
 
-**Doer stages** run an agentic tool-use loop with exactly four tools: `read_file`, `write_file`, `run_bash`, `list_dir`. The LLM calls tools, the supervisor executes them, results go back to the LLM, repeat until the builder says "ready for review."
+**Doer stages** run an agentic tool-use loop with exactly four tools: `read_file`, `write_file`, `run_bash`, `list_dir`. The LLM calls tools, the supervisor executes them, results go back to the LLM, repeat until the agent finishes. The Evaluator uses this to read actual source files and run tests. The Doc Writer uses it to read code before writing documentation.
 
 ## How It Really Works
 
@@ -81,7 +81,7 @@ The orchestrator. When you run `productteam run "concept"`, the Supervisor reads
 
 ### The Tool Loop (`tool_loop.py`)
 
-The agentic runtime for Builder and UI Builder stages. Exactly four tools:
+The agentic runtime for all doer stages (Builder, UI Builder, Evaluator, Doc Writer). Exactly four tools:
 
 - **`read_file`** — Read any file in the project. Path must be relative, no `..` traversal.
 - **`write_file`** — Write content to a file. Creates parent directories.
@@ -242,6 +242,30 @@ Tail the log for a job.
 Options:
   --tail, -n    Number of lines (default: 50)
 ```
+
+### `productteam test [OPTIONS]`
+
+Run the ProductTeam test suite.
+
+```
+Options:
+  --live              Run live integration tests (makes real API calls)
+  --provider, -p      LLM provider for live tests (anthropic|openai|ollama|gemini)
+  --model, -m         Model override for live tests
+  --verbose, -v       Verbose pytest output
+  --cov               Run with coverage reporting
+  -k EXPRESSION       pytest -k filter expression
+  --dir, -d           Project directory
+
+Examples:
+  productteam test                          # offline unit tests only
+  productteam test --live                   # live tests (costs money)
+  productteam test --live -p ollama         # live tests against local Ollama
+  productteam test -v --cov                 # verbose with coverage
+  productteam test -k "test_supervisor"     # run specific tests
+```
+
+Live mode shows a safety warning before running, displays your masked API key, and defaults to the cheapest available model (Haiku for Anthropic).
 
 ## Forge
 

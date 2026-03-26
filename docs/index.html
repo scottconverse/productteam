@@ -581,7 +581,7 @@
             <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent);">Thinker Stages</span>
             <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Any Provider</span>
           </div>
-          <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">PRD Writer, Planner, Evaluator, Design Evaluator, and Doc Writer are <strong>thinkers</strong>. They take context in and produce a text artifact out. One LLM call: system prompt (the SKILL.md file), user message (the context), response (the artifact).</p>
+          <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">PRD Writer, Planner, and Design Evaluator are <strong>thinkers</strong>. They take context in and produce a text artifact out. One LLM call: system prompt (the SKILL.md file), user message (the context), response (the artifact).</p>
           <p style="color:var(--muted);font-size:13px;line-height:1.6;">Because they don't need to touch the filesystem, they work with any provider &mdash; Anthropic, OpenAI, Ollama, Gemini. The Supervisor calls <code style="color:var(--green);font-family:var(--mono);font-size:13px;">provider.complete(system, messages)</code> and writes the result to <code style="color:var(--green);font-family:var(--mono);font-size:13px;">.productteam/</code>.</p>
         </div>
 
@@ -590,8 +590,8 @@
             <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--yellow);">Doer Stages</span>
             <span style="font-size:12px;color:var(--yellow);border:1px solid var(--yellow);padding:2px 8px;border-radius:12px;">Tool-Use Loop</span>
           </div>
-          <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">Builder and UI Builder are <strong>doers</strong>. They need to read files, write code, run tests, and react to results. A single LLM call can't do that. They use an agentic tool-use loop.</p>
-          <p style="color:var(--muted);font-size:13px;line-height:1.6;">The loop: call LLM with 4 tools (read_file, write_file, run_bash, list_dir). LLM says "write this to src/app.py" &mdash; the loop writes it. LLM says "run pytest" &mdash; the loop runs it and sends back stdout/stderr. This continues until the LLM stops calling tools and says "ready for review." Path validation blocks traversal attacks. Command validation blocks credential access. Loop detection catches the LLM calling the same tool with identical args 3 times.</p>
+          <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">Builder, UI Builder, Evaluator, and Doc Writer are <strong>doers</strong>. They need to read files, write code, run tests, and react to results. A single LLM call can't do that. They use an agentic tool-use loop.</p>
+          <p style="color:var(--muted);font-size:13px;line-height:1.6;">The loop: call LLM with 4 tools (read_file, write_file, run_bash, list_dir). The Evaluator reads source files and runs the test suite. The Doc Writer reads every module before writing a single line of documentation. Path validation blocks traversal attacks. Command validation blocks credential access. Loop detection catches the LLM calling the same tool with identical args 3 times.</p>
         </div>
       </div>
 
@@ -883,7 +883,7 @@
       &nbsp;&middot;&nbsp;
       Built by Scott Converse
     </p>
-    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.0.1 &middot; Powered by Claude</p>
+    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.0.2 &middot; Powered by Claude</p>
   </div>
 </footer>
 

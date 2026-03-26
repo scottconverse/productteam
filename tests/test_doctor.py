@@ -31,7 +31,8 @@ def test_package_version_passes():
     """Package version check always passes when installed."""
     result = check_package_version()
     assert result.passed is True
-    assert "2.0.1" in result.message
+    from productteam import __version__
+    assert __version__ in result.message
 
 
 def test_config_missing(tmp_path):

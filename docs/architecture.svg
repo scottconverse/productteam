@@ -15,7 +15,7 @@
   <rect width="1080" height="820" fill="#0e1117" rx="12"/>
 
   <!-- Title -->
-  <text x="540" y="40" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">ProductTeam v2.0.1 Architecture</text>
+  <text x="540" y="40" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">ProductTeam v2.0.2 Architecture</text>
 
   <!-- ═══════════════════════════════════════════════════ -->
   <!-- USER INPUT layer -->
@@ -77,8 +77,8 @@
   <!-- ═══════════════════════════════════════════════════ -->
   <!-- THINKER STAGES -->
   <!-- ═══════════════════════════════════════════════════ -->
-  <rect x="30" y="300" width="505" height="200" rx="8" fill="#161b22" stroke="#30363d"/>
-  <text x="50" y="322" fill="#58a6ff" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">THINKER STAGES — single provider.complete() call</text>
+  <rect x="30" y="300" width="340" height="200" rx="8" fill="#161b22" stroke="#30363d"/>
+  <text x="50" y="322" fill="#58a6ff" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">THINKER STAGES — provider.complete()</text>
 
   <!-- PRD Writer -->
   <rect x="50" y="335" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
@@ -87,91 +87,70 @@
   <text x="122" y="390" text-anchor="middle" fill="#d29922" font-size="9">GATE: approve PRD</text>
 
   <!-- Planner -->
-  <rect x="210" y="335" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
-  <text x="282" y="358" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Planner</text>
-  <text x="282" y="375" text-anchor="middle" fill="#8b949e" font-size="9">PRD → sprint contracts</text>
-  <text x="282" y="390" text-anchor="middle" fill="#d29922" font-size="9">GATE: approve sprints</text>
+  <rect x="205" y="335" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
+  <text x="277" y="358" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Planner</text>
+  <text x="277" y="375" text-anchor="middle" fill="#8b949e" font-size="9">PRD → sprint contracts</text>
+  <text x="277" y="390" text-anchor="middle" fill="#d29922" font-size="9">GATE: approve sprints</text>
 
   <!-- Arrow PRD to Planner -->
-  <line x1="195" y1="367" x2="205" y2="367" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
-
-  <!-- Evaluator -->
-  <rect x="50" y="415" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
-  <text x="122" y="438" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Evaluator</text>
-  <text x="122" y="455" text-anchor="middle" fill="#8b949e" font-size="9">code → PASS/FAIL</text>
-  <text x="122" y="470" text-anchor="middle" fill="#f85149" font-size="9">skeptical by default</text>
+  <line x1="195" y1="367" x2="200" y2="367" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
 
   <!-- Design Evaluator -->
-  <rect x="210" y="415" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
-  <text x="282" y="435" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Design</text>
-  <text x="282" y="448" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Evaluator</text>
-  <text x="282" y="465" text-anchor="middle" fill="#8b949e" font-size="9">4 dimensions, 1-5 scale</text>
-
-  <!-- Doc Writer -->
-  <rect x="370" y="415" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
-  <text x="442" y="438" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Doc Writer</text>
-  <text x="442" y="455" text-anchor="middle" fill="#8b949e" font-size="9">code → README, docs</text>
-  <text x="442" y="470" text-anchor="middle" fill="#8b949e" font-size="9">reads, never fabricates</text>
+  <rect x="50" y="415" width="145" height="65" rx="6" fill="#0e1117" stroke="#30363d"/>
+  <text x="122" y="435" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Design</text>
+  <text x="122" y="448" text-anchor="middle" fill="#e6edf3" font-size="12" font-weight="600">Evaluator</text>
+  <text x="122" y="465" text-anchor="middle" fill="#8b949e" font-size="9">4 dimensions, 1-5 scale</text>
 
   <!-- ═══════════════════════════════════════════════════ -->
   <!-- DOER STAGES -->
   <!-- ═══════════════════════════════════════════════════ -->
-  <rect x="555" y="300" width="495" height="200" rx="8" fill="#161b22" stroke="#d29922" stroke-dasharray="4,4"/>
-  <text x="575" y="322" fill="#d29922" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">DOER STAGES — agentic tool-use loop</text>
+  <rect x="390" y="300" width="660" height="200" rx="8" fill="#161b22" stroke="#d29922" stroke-dasharray="4,4"/>
+  <text x="410" y="322" fill="#d29922" font-size="10" font-family="'SF Mono', monospace" letter-spacing="1.5">DOER STAGES — agentic tool-use loop (4 tools: read_file, write_file, run_bash, list_dir)</text>
 
   <!-- Builder -->
-  <rect x="575" y="335" width="210" height="150" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
-  <text x="680" y="358" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">Builder</text>
-  <text x="680" y="375" text-anchor="middle" fill="#8b949e" font-size="10">sprint contract → code</text>
-
-  <!-- Tool icons inside Builder -->
-  <rect x="590" y="390" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
-  <text x="635" y="405" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">read_file</text>
-
-  <rect x="690" y="390" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
-  <text x="735" y="405" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">write_file</text>
-
-  <rect x="590" y="418" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
-  <text x="635" y="433" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">run_bash</text>
-
-  <rect x="690" y="418" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
-  <text x="735" y="433" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">list_dir</text>
-
-  <text x="680" y="465" text-anchor="middle" fill="#8b949e" font-size="9">max 50 tool calls | loop detection</text>
-  <text x="680" y="478" text-anchor="middle" fill="#8b949e" font-size="9">path validation | cmd security</text>
+  <rect x="410" y="335" width="145" height="75" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
+  <text x="482" y="358" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">Builder</text>
+  <text x="482" y="375" text-anchor="middle" fill="#8b949e" font-size="9">sprint → code</text>
+  <text x="482" y="390" text-anchor="middle" fill="#8b949e" font-size="9">max 50 tool calls</text>
+  <text x="482" y="403" text-anchor="middle" fill="#8b949e" font-size="9">path + cmd security</text>
 
   <!-- UI Builder -->
-  <rect x="805" y="335" width="210" height="150" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
-  <text x="910" y="358" text-anchor="middle" fill="#e6edf3" font-size="14" font-weight="700">UI Builder</text>
-  <text x="910" y="375" text-anchor="middle" fill="#8b949e" font-size="10">sprint → visual artifacts</text>
+  <rect x="570" y="335" width="145" height="75" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
+  <text x="642" y="358" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">UI Builder</text>
+  <text x="642" y="375" text-anchor="middle" fill="#8b949e" font-size="9">sprint → visual</text>
+  <text x="642" y="390" text-anchor="middle" fill="#8b949e" font-size="9">dark theme | WCAG AA</text>
+  <text x="642" y="403" text-anchor="middle" fill="#8b949e" font-size="9">responsive</text>
 
-  <!-- Tool icons inside UI Builder -->
-  <rect x="820" y="390" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
-  <text x="865" y="405" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">read_file</text>
+  <!-- Evaluator (DOER) -->
+  <rect x="730" y="335" width="145" height="75" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
+  <text x="802" y="358" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">Evaluator</text>
+  <text x="802" y="375" text-anchor="middle" fill="#8b949e" font-size="9">reads code, runs tests</text>
+  <text x="802" y="390" text-anchor="middle" fill="#8b949e" font-size="9">PASS / NEEDS_WORK / FAIL</text>
+  <text x="802" y="403" text-anchor="middle" fill="#f85149" font-size="9">skeptical by default</text>
 
-  <rect x="920" y="390" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
-  <text x="965" y="405" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">write_file</text>
-
-  <rect x="820" y="418" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
-  <text x="865" y="433" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">run_bash</text>
-
-  <rect x="920" y="418" width="90" height="22" rx="3" fill="#161b22" stroke="#30363d"/>
-  <text x="965" y="433" text-anchor="middle" fill="#3fb950" font-size="9" font-family="'SF Mono', monospace">list_dir</text>
-
-  <text x="910" y="465" text-anchor="middle" fill="#8b949e" font-size="9">dark theme | WCAG AA</text>
-  <text x="910" y="478" text-anchor="middle" fill="#8b949e" font-size="9">responsive | same 4 tools</text>
+  <!-- Doc Writer (DOER) -->
+  <rect x="890" y="335" width="145" height="75" rx="6" fill="#0e1117" stroke="#d29922" stroke-width="2"/>
+  <text x="962" y="358" text-anchor="middle" fill="#e6edf3" font-size="13" font-weight="700">Doc Writer</text>
+  <text x="962" y="375" text-anchor="middle" fill="#8b949e" font-size="9">reads source, writes docs</text>
+  <text x="962" y="390" text-anchor="middle" fill="#8b949e" font-size="9">README, SVG, HTML</text>
+  <text x="962" y="403" text-anchor="middle" fill="#8b949e" font-size="9">never fabricates</text>
 
   <!-- Build-Evaluate loop arrow -->
-  <path d="M 195 415 Q 170 405 195 395" fill="none" stroke="#f85149" stroke-width="1.5"/>
-  <line x1="535" y1="460" x2="555" y2="410" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4,4"/>
-  <text x="548" y="445" fill="#f85149" font-size="9" transform="rotate(-50, 548, 445)">NEEDS_WORK</text>
+  <line x1="802" y1="410" x2="482" y2="445" stroke="#f85149" stroke-width="1.5" stroke-dasharray="4,4"/>
+  <text x="640" y="440" text-anchor="middle" fill="#f85149" font-size="9">NEEDS_WORK → re-loop</text>
 
   <!-- Arrow Planner to Builder -->
-  <line x1="355" y1="367" x2="565" y2="367" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="350" y1="367" x2="400" y2="367" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
 
   <!-- Arrow Builder to Evaluator -->
-  <line x1="575" y1="485" x2="195" y2="470" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="385" y="488" text-anchor="middle" fill="#58a6ff" font-size="9">ready for review</text>
+  <line x1="555" y1="372" x2="720" y2="372" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="637" y="366" text-anchor="middle" fill="#58a6ff" font-size="9">ready for review</text>
+
+  <!-- Shared tool set label -->
+  <rect x="410" y="425" width="625" height="60" rx="6" fill="#0e1117" stroke="#30363d"/>
+  <text x="722" y="445" text-anchor="middle" fill="#3fb950" font-size="11" font-family="'SF Mono', monospace" font-weight="600">Shared tool sandbox: read_file | write_file | run_bash | list_dir</text>
+  <text x="722" y="462" text-anchor="middle" fill="#8b949e" font-size="9">Path validation (no traversal) | Credential path blocking | Loop detection (3x identical) | Output truncation (4KB)</text>
+  <text x="722" y="476" text-anchor="middle" fill="#d29922" font-size="9">GATE: ship approval after all evaluations pass</text>
 
   <!-- ═══════════════════════════════════════════════════ -->
   <!-- PROVIDER LAYER -->
