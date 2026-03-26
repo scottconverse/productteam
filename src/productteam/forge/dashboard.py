@@ -1,7 +1,8 @@
 """Minimal status dashboard for Forge.
 
-Serves a single-page dashboard at http://127.0.0.1:<port> using
+Serves a single-page dashboard at http://<host>:<port> using
 stdlib http.server. No dependencies, no framework, no build step.
+Accessible from any device on your local network when bound to 0.0.0.0.
 """
 
 from __future__ import annotations
@@ -25,7 +26,28 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:var(--bg); color:var(--text); font-family:-apple-system,sans-serif; font-size:14px; }
   .container { max-width:960px; margin:0 auto; padding:24px; }
-  h1 { font-family:var(--mono); font-size:20px; margin-bottom:24px; }
+  h1 { font-family:var(--mono); font-size:20px; margin-bottom:16px; }
+
+  /* Submit form */
+  .submit-form { display:flex; gap:8px; margin-bottom:24px; }
+  .submit-input {
+    flex:1; padding:10px 14px; background:var(--surface); border:1px solid var(--border);
+    border-radius:6px; color:var(--text); font-size:14px; font-family:inherit;
+    outline:none; transition:border-color 0.15s;
+  }
+  .submit-input:focus { border-color:var(--accent); }
+  .submit-input::placeholder { color:var(--muted); }
+  .submit-btn {
+    padding:10px 20px; background:var(--accent); color:#0e1117; border:none;
+    border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;
+    font-family:inherit; white-space:nowrap; transition:opacity 0.15s;
+  }
+  .submit-btn:hover { opacity:0.9; }
+  .submit-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .submit-msg { font-size:12px; margin-top:4px; }
+  .submit-msg.ok { color:var(--green); }
+  .submit-msg.err { color:var(--red); }
+
   table { width:100%; border-collapse:collapse; margin-bottom:24px; }
   th { text-align:left; padding:8px 12px; border-bottom:2px solid var(--border); color:var(--muted); font-size:12px; text-transform:uppercase; }
   td { padding:8px 12px; border-bottom:1px solid var(--border); }
@@ -39,11 +61,28 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   .btn:hover { border-color:var(--accent); }
   .btn-approve { border-color:var(--green); color:var(--green); }
   .btn-reject { border-color:var(--red); color:var(--red); }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .container { padding:16px; }
+    .submit-form { flex-direction:column; }
+    .submit-btn { width:100%; }
+    td, th { padding:6px 8px; font-size:13px; }
+  }
 </style>
 </head>
 <body>
 <div class="container">
   <h1>ProductTeam Forge</h1>
+
+  <!-- Submit form -->
+  <form class="submit-form" id="submit-form" onsubmit="submitIdea(event)">
+    <input class="submit-input" id="concept-input" type="text" placeholder="Describe your product idea..." autocomplete="off" required>
+    <button class="submit-btn" type="submit" id="submit-btn">Forge it</button>
+  </form>
+  <div class="submit-msg" id="submit-msg"></div>
+
+  <!-- Jobs table -->
   <table id="jobs">
     <thead><tr><th>Job</th><th>Concept</th><th>Status</th><th>Stage</th><th>Actions</th></tr></thead>
     <tbody id="job-rows"></tbody>
@@ -53,6 +92,44 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
 </div>
 <script>
 let selectedJob = null;
+
+async function submitIdea(e) {
+  e.preventDefault();
+  const input = document.getElementById('concept-input');
+  const btn = document.getElementById('submit-btn');
+  const msg = document.getElementById('submit-msg');
+  const concept = input.value.trim();
+  if (!concept) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+  msg.textContent = '';
+  msg.className = 'submit-msg';
+
+  try {
+    const resp = await fetch('/api/submit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({concept: concept})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      msg.textContent = 'Submitted: ' + data.job_id;
+      msg.className = 'submit-msg ok';
+      input.value = '';
+      refresh();
+    } else {
+      msg.textContent = 'Error: ' + (data.error || 'unknown');
+      msg.className = 'submit-msg err';
+    }
+  } catch(err) {
+    msg.textContent = 'Failed to submit: ' + err.message;
+    msg.className = 'submit-msg err';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Forge it';
+}
+
 async function refresh() {
   try {
     const resp = await fetch('/api/jobs');
@@ -108,7 +185,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._respond(404, "text/plain", "Not found")
 
     def do_POST(self) -> None:
-        if self.path.startswith("/api/approve/"):
+        if self.path == "/api/submit":
+            # Read JSON body
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8") if content_length else "{}"
+            try:
+                data = json.loads(body)
+                concept = data.get("concept", "").strip()
+                if not concept:
+                    self._respond(400, "application/json", '{"ok":false,"error":"concept is required"}')
+                    return
+                job = self.queue.enqueue(concept)
+                self._respond(200, "application/json", json.dumps({
+                    "ok": True,
+                    "job_id": job.job_id,
+                    "concept": job.concept,
+                }))
+            except Exception as e:
+                self._respond(500, "application/json", json.dumps({"ok": False, "error": str(e)}))
+        elif self.path.startswith("/api/approve/"):
             job_id = self.path.split("/")[-1]
             self.queue.clear_gate(job_id)
             self._respond(200, "application/json", '{"ok":true}')
@@ -131,10 +226,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
         pass  # Suppress default logging
 
 
-def serve_dashboard(queue: FileQueue, port: int = 7654) -> HTTPServer:
-    """Start the dashboard server in a background thread."""
+def serve_dashboard(
+    queue: FileQueue,
+    port: int = 7654,
+    host: str = "0.0.0.0",
+) -> HTTPServer:
+    """Start the dashboard server in a background thread.
+
+    Args:
+        queue: The file queue to serve.
+        port: Port to listen on (default: 7654).
+        host: Host to bind to. '0.0.0.0' = accessible from LAN.
+              '127.0.0.1' = localhost only.
+    """
     DashboardHandler.queue = queue
-    server = HTTPServer(("127.0.0.1", port), DashboardHandler)
+    server = HTTPServer((host, port), DashboardHandler)
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server

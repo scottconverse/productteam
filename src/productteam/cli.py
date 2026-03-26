@@ -458,9 +458,19 @@ def _forge_listen(with_dashboard: bool) -> None:
 
     if with_dashboard:
         from productteam.forge.dashboard import serve_dashboard
+        host = config.forge.status_host
         port = config.forge.status_port
-        serve_dashboard(queue, port=port)
-        console.print(f"[green]Dashboard:[/green] http://127.0.0.1:{port}")
+        serve_dashboard(queue, port=port, host=host)
+        if host == "0.0.0.0":
+            import socket
+            try:
+                local_ip = socket.gethostbyname(socket.gethostname())
+            except Exception:
+                local_ip = "your-machine-ip"
+            console.print(f"[green]Dashboard:[/green] http://localhost:{port}")
+            console.print(f"[green]From phone:[/green] http://{local_ip}:{port}")
+        else:
+            console.print(f"[green]Dashboard:[/green] http://{host}:{port}")
 
     console.print("[bold]Forge daemon started.[/bold] Watching for jobs... (Ctrl+C to stop)")
 
