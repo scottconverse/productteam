@@ -408,7 +408,10 @@
     <p style="display:inline-block;background:var(--surface);border:1px solid var(--accent);border-radius:20px;padding:6px 18px;font-family:var(--font-mono);font-size:13px;color:var(--accent);margin-bottom:24px;">Built for Claude Code</p>
     <p style="font-size:14px;color:var(--text-muted);max-width:480px;margin:0 auto 32px;">ProductTeam is a set of Claude Code skills designed for use with Claude Code in the Claude desktop app.</p>
     <div class="hero-code">
-      <span class="muted">/productteam</span> "I want a CLI tool that estimates API costs"
+      <span class="muted">$</span> <span class="cmd">pip install productteam</span>
+    </div>
+    <div class="hero-code" style="margin-top:8px;">
+      <span class="muted">$</span> productteam run <span class="cmd">"I want a CLI tool that estimates API costs"</span>
     </div>
   </div>
 </section>
@@ -616,20 +619,138 @@
   </div>
 </section>
 
-<!-- Install -->
+<!-- Getting Started -->
 <section class="install-section">
   <div class="container">
-    <p class="section-label">Get Started</p>
-    <h2 class="section-title">Installation</h2>
-    <p class="section-desc">Copy the skills into your project. No dependencies, no setup, no configuration files.</p>
+    <p class="section-label">60 Seconds</p>
+    <h2 class="section-title">Getting Started</h2>
+    <p class="section-desc">Install, init, run. Three commands to your first pipeline.</p>
     <div class="install-block">
-      <span class="comment"># Copy skills into your project</span><br>
-      <span class="cmd">cp -r productteam/skills/ your-project/.claude/skills/</span>
+      <span class="comment"># Install</span><br>
+      <span class="cmd">pip install productteam</span><br><br>
+      <span class="comment"># Set up your provider</span><br>
+      <span class="cmd">export ANTHROPIC_API_KEY=sk-ant-...</span><br><br>
+      <span class="comment"># Init a project</span><br>
+      <span class="cmd">productteam init</span><br><br>
+      <span class="comment"># Run the full pipeline</span><br>
+      <span class="cmd">productteam run "a CLI tool that estimates LLM API costs"</span>
     </div>
-    <div class="install-block">
-      <span class="comment"># Or clone and symlink</span><br>
-      <span class="cmd">git clone https://github.com/scottconverse/productteam.git</span><br>
-      <span class="cmd">ln -s /path/to/productteam/skills your-project/.claude/skills</span>
+  </div>
+</section>
+
+<!-- CLI Commands -->
+<section class="how-section">
+  <div class="container">
+    <p class="section-label">CLI</p>
+    <h2 class="section-title">Commands</h2>
+    <p class="section-desc">Every command you need.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+      <div class="install-block" style="margin:0;">
+        <span class="comment"># Run the pipeline</span><br>
+        <span class="cmd">productteam run "concept"</span><br>
+        <span class="cmd">productteam run</span> <span class="comment"># resume</span><br>
+        <span class="cmd">productteam run --auto-approve</span>
+      </div>
+      <div class="install-block" style="margin:0;">
+        <span class="comment"># Forge: phone to product</span><br>
+        <span class="cmd">productteam forge "idea"</span><br>
+        <span class="cmd">productteam forge --listen</span><br>
+        <span class="cmd">productteam forge status</span>
+      </div>
+      <div class="install-block" style="margin:0;">
+        <span class="comment"># Setup &amp; diagnostics</span><br>
+        <span class="cmd">productteam init</span><br>
+        <span class="cmd">productteam doctor</span><br>
+        <span class="cmd">productteam status</span>
+      </div>
+      <div class="install-block" style="margin:0;">
+        <span class="comment"># Configuration</span><br>
+        <span class="cmd">productteam config</span><br>
+        <span class="cmd">productteam config set pipeline.provider ollama</span><br>
+        <span class="cmd">productteam config set pipeline.model llama3</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Forge -->
+<section class="pipeline-section">
+  <div class="container">
+    <p class="section-label">Forge</p>
+    <h2 class="section-title">Phone to product</h2>
+    <p class="section-desc">Submit an idea from anywhere. A daemon picks it up, runs the full pipeline, and notifies you when it's done or needs your approval.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;">
+      <div class="gate-card">
+        <div class="gate-number">1</div>
+        <div class="gate-title">Submit</div>
+        <div class="gate-desc" style="font-family:var(--mono);font-size:12px;margin-top:8px;">forge "ballot measure tracker"</div>
+      </div>
+      <div class="gate-card">
+        <div class="gate-number">2</div>
+        <div class="gate-title">Daemon runs</div>
+        <div class="gate-desc">PRD, plan, build, evaluate, document. Fully headless.</div>
+      </div>
+      <div class="gate-card">
+        <div class="gate-number">3</div>
+        <div class="gate-title">Approve gates</div>
+        <div class="gate-desc">Get notified via webhook or Slack. Approve from CLI or dashboard.</div>
+      </div>
+      <div class="gate-card">
+        <div class="gate-number">4</div>
+        <div class="gate-title">Product ready</div>
+        <div class="gate-desc">Code written, tests passing, docs generated. Ship it.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Design Evaluator -->
+<section class="team-section">
+  <div class="container">
+    <div style="background:var(--surface);border:1px solid var(--yellow);border-radius:8px;padding:32px;">
+      <p class="section-label" style="color:var(--yellow);">Standalone Skill</p>
+      <h2 class="section-title">Design Evaluator</h2>
+      <p class="section-desc" style="margin-bottom:24px;">Grades visual artifacts like a senior designer with 15 years of experience. Four scoring dimensions, evidence-based feedback, no vague criticism.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">
+        <div style="text-align:center;padding:16px;">
+          <div style="font-size:24px;font-weight:700;color:var(--yellow);">30%</div>
+          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">Coherence</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Unified visual language</div>
+        </div>
+        <div style="text-align:center;padding:16px;">
+          <div style="font-size:24px;font-weight:700;color:var(--yellow);">25%</div>
+          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">Originality</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Deliberate creative choices</div>
+        </div>
+        <div style="text-align:center;padding:16px;">
+          <div style="font-size:24px;font-weight:700;color:var(--yellow);">25%</div>
+          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">Craft</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Typography, spacing, contrast</div>
+        </div>
+        <div style="text-align:center;padding:16px;">
+          <div style="font-size:24px;font-weight:700;color:var(--yellow);">20%</div>
+          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">Functionality</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">User understands in 10 sec</div>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin-top:16px;">4.0+ = PASS &nbsp;&middot;&nbsp; 3.0-3.9 = NEEDS_WORK &nbsp;&middot;&nbsp; Below 3.0 = FAIL</p>
+    </div>
+  </div>
+</section>
+
+<!-- Works With -->
+<section class="compare-section">
+  <div class="container">
+    <p class="section-label">Works With</p>
+    <h2 class="section-title">Multi-provider support</h2>
+    <p class="section-desc">Thinker stages work with any provider. Configure once in productteam.toml.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:24px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">Anthropic Claude</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">OpenAI GPT-4o</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">Ollama (local)</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">Google Gemini</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">LM Studio</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">vLLM</div>
     </div>
   </div>
 </section>
@@ -646,7 +767,7 @@
       &nbsp;&middot;&nbsp;
       Built by Scott Converse
     </p>
-    <p style="margin-top:8px;font-size:12px;color:#484f58;">Powered by Claude</p>
+    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.0.0 &middot; Powered by Claude</p>
   </div>
 </footer>
 
