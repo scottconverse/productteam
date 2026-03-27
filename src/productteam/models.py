@@ -4,8 +4,9 @@ from pydantic import BaseModel, Field
 
 
 class ProjectConfig(BaseModel):
+    """User's project metadata (not the productteam package version)."""
     name: str = ""
-    version: str = "0.1.0"
+    version: str = "0.1.0"  # default for new user projects, not the package version
 
 
 class PipelineConfig(BaseModel):
