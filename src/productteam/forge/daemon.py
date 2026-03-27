@@ -86,8 +86,12 @@ class ForgeDaemon:
             auto_approve=True,
         )
 
+        def _stage_callback(stage: str) -> None:
+            self.queue.update_status(job.job_id, JobStatus.RUNNING, current_stage=stage)
+            self.queue.append_log(job.job_id, f"Stage: {stage}")
+
         try:
-            result = await supervisor.run(concept=job.concept)
+            result = await supervisor.run(concept=job.concept, stage_callback=_stage_callback)
         except Exception as e:
             self.queue.update_status(
                 job.job_id, JobStatus.FAILED, error=str(e)

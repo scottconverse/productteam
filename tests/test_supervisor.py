@@ -13,6 +13,7 @@ from productteam.supervisor import (
     PipelineStage,
     StageResult,
     Supervisor,
+    _load_skill,
     _load_state,
     _save_state,
 )
@@ -969,3 +970,47 @@ async def test_design_eval_disk_fallback_finds_pass(tmp_path):
     assert verdict == "pass", (
         "Design eval disk fallback failed to read PASS from eval-001-design.yaml"
     )
+
+
+def test_load_skill_uses_configured_path(tmp_path):
+    """_load_skill reads from the configured skills_dir instead of the default."""
+    # Create a skill in a custom directory
+    custom_dir = tmp_path / "custom" / "skills" / "test-skill"
+    custom_dir.mkdir(parents=True)
+    (custom_dir / "SKILL.md").write_text("# Custom skill content")
+
+    content = _load_skill(tmp_path, "test-skill", skills_dir="custom/skills")
+    assert content == "# Custom skill content"
+
+
+def test_load_skill_error_message_includes_config_hint(tmp_path):
+    """_load_skill error message suggests checking skills_dir config."""
+    with pytest.raises(FileNotFoundError, match="skills_dir"):
+        _load_skill(tmp_path, "nonexistent-skill", skills_dir="custom/path")
+
+
+@pytest.mark.asyncio
+async def test_stage_callback_called_during_pipeline(tmp_path):
+    """stage_callback fires for each stage in the pipeline."""
+    _init_project(tmp_path)
+    config = _make_config()
+    mock_provider = AsyncMock()
+    mock_provider.complete = AsyncMock(return_value="PRD content here.")
+
+    stages_seen: list[str] = []
+
+    def callback(stage: str) -> None:
+        stages_seen.append(stage)
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+
+    # Without callback set, _notify_stage should be a no-op
+    supervisor._stage_callback = None
+    supervisor._notify_stage("prd")
+    assert stages_seen == []
+
+    # With callback set, it should fire
+    supervisor._stage_callback = callback
+    supervisor._notify_stage("prd")
+    supervisor._notify_stage("plan")
+    assert stages_seen == ["prd", "plan"]

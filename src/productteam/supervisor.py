@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
@@ -102,11 +102,15 @@ def _save_state(project_dir: Path, state: dict) -> None:
     state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
-def _load_skill(project_dir: Path, skill_name: str) -> str:
+def _load_skill(project_dir: Path, skill_name: str, skills_dir: str = ".claude/skills") -> str:
     """Load a SKILL.md file content."""
-    skill_path = project_dir / ".claude" / "skills" / skill_name / "SKILL.md"
+    skill_path = project_dir / skills_dir / skill_name / "SKILL.md"
     if not skill_path.exists():
-        raise FileNotFoundError(f"Skill not found: {skill_path}")
+        raise FileNotFoundError(
+            f"Skill not found: {skill_path}\n"
+            f"Check that skills are installed (run 'productteam init') "
+            f"or update 'skills_dir' in productteam.toml."
+        )
     return skill_path.read_text(encoding="utf-8")
 
 
@@ -149,6 +153,7 @@ class Supervisor:
         sprint: str | None = None,
         rebuild: bool = False,
         dry_run: bool = False,
+        stage_callback: "Callable[[str], None] | None" = None,
     ) -> SupervisorResult:
         """Run the full pipeline or a single step.
 
@@ -158,7 +163,9 @@ class Supervisor:
             sprint: Target sprint (with step=build or evaluate).
             rebuild: Force rebuild even if passed.
             dry_run: Show what would happen without calling LLM.
+            stage_callback: Called with stage name when each stage starts.
         """
+        self._stage_callback = stage_callback
         stages: list[StageResult] = []
 
         # Resume or fresh start
@@ -358,6 +365,12 @@ class Supervisor:
         else:
             return StageResult(stage=stage, status="skipped")
 
+    def _notify_stage(self, stage_name: str) -> None:
+        """Fire the stage callback if one was set."""
+        cb = getattr(self, "_stage_callback", None)
+        if cb:
+            cb(stage_name)
+
     async def _run_thinker_stage(
         self,
         stage: PipelineStage,
@@ -365,10 +378,11 @@ class Supervisor:
         context: str,
     ) -> StageResult:
         """Run a thinker stage (single LLM call)."""
+        self._notify_stage(stage.value)
         console.print(f"\n[bold cyan]Running: {stage.value}[/bold cyan]")
 
         try:
-            system_prompt = _load_skill(self.project_dir, skill_name)
+            system_prompt = _load_skill(self.project_dir, skill_name, self.config.pipeline.skills_dir)
         except FileNotFoundError as e:
             return StageResult(stage=stage, status="failed", error=str(e))
 
@@ -419,10 +433,11 @@ class Supervisor:
         timeout_seconds: float | None = None,
     ) -> StageResult:
         """Run a doer stage (tool loop with file access)."""
+        self._notify_stage(stage.value)
         console.print(f"\n[bold cyan]Running: {stage.value} (tool loop)[/bold cyan]")
 
         try:
-            system_prompt = _load_skill(self.project_dir, skill_name)
+            system_prompt = _load_skill(self.project_dir, skill_name, self.config.pipeline.skills_dir)
         except FileNotFoundError as e:
             return StageResult(stage=stage, status="failed", error=str(e))
 
@@ -499,7 +514,7 @@ class Supervisor:
             _save_state(self.project_dir, self.state)
 
             try:
-                system_prompt = _load_skill(self.project_dir, "builder")
+                system_prompt = _load_skill(self.project_dir, "builder", self.config.pipeline.skills_dir)
             except FileNotFoundError as e:
                 return StageResult(
                     stage=PipelineStage.BUILD, status="failed", error=str(e)
@@ -566,7 +581,7 @@ class Supervisor:
             _save_state(self.project_dir, self.state)
 
             try:
-                eval_system = _load_skill(self.project_dir, "evaluator")
+                eval_system = _load_skill(self.project_dir, "evaluator", self.config.pipeline.skills_dir)
             except FileNotFoundError as e:
                 return StageResult(
                     stage=PipelineStage.EVALUATE, status="failed", error=str(e)

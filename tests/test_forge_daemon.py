@@ -183,3 +183,38 @@ async def test_daemon_webhook_notification(tmp_path):
         await daemon._notify(job, "job_complete", "Done")
 
         mock_client.post.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_stage_callback_called_for_each_stage(tmp_path):
+    """Daemon passes stage_callback to supervisor.run() and it updates the queue."""
+    config = _make_config()
+    queue = FileQueue(queue_dir=tmp_path)
+    job = queue.enqueue("callback test")
+
+    with patch("productteam.forge.daemon.get_provider") as mock_get_provider, \
+         patch("productteam.forge.daemon.Supervisor") as MockSupervisor:
+
+        mock_provider = AsyncMock()
+        mock_get_provider.return_value = mock_provider
+
+        mock_supervisor = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.status = "complete"
+        mock_supervisor.run = AsyncMock(return_value=mock_result)
+        MockSupervisor.return_value = mock_supervisor
+
+        daemon = ForgeDaemon(config=config, queue=queue)
+        await daemon.process_job(job)
+
+        # Verify supervisor.run was called with a stage_callback
+        mock_supervisor.run.assert_called_once()
+        call_kwargs = mock_supervisor.run.call_args.kwargs
+        assert "stage_callback" in call_kwargs
+        assert call_kwargs["stage_callback"] is not None
+
+        # Simulate calling the callback to verify it updates the queue
+        callback = call_kwargs["stage_callback"]
+        callback("prd")
+        reloaded = queue.get_job(job.job_id)
+        assert reloaded.current_stage == "prd"
