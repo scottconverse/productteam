@@ -290,6 +290,9 @@ def run_cmd(
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Show what would happen without calling the LLM"
     ),
+    budget: Optional[float] = typer.Option(
+        None, "--budget", help="Max USD to spend (overrides config; default $2.00)"
+    ),
     directory: Optional[Path] = typer.Option(
         None, "--dir", "-d", help="Project directory (default: current directory)"
     ),
@@ -355,17 +358,28 @@ def run_cmd(
         config=config,
         provider=provider,
         auto_approve=use_auto,
+        budget_usd=budget,
     )
 
-    result = asyncio.run(
-        supervisor.run(
-            concept=concept or "",
-            step=step,
-            sprint=sprint,
-            rebuild=rebuild,
-            dry_run=dry_run,
+    from productteam.errors import BudgetExceededError
+
+    try:
+        result = asyncio.run(
+            supervisor.run(
+                concept=concept or "",
+                step=step,
+                sprint=sprint,
+                rebuild=rebuild,
+                dry_run=dry_run,
+            )
         )
-    )
+    except BudgetExceededError as exc:
+        error_console.print(f"\n[bold red]BUDGET EXCEEDED[/bold red]: {exc}")
+        error_console.print(
+            f"[dim]Spent ${exc.spent:.4f} against ${exc.budget:.2f} limit. "
+            f"Work is saved on disk. Resume with a higher --budget or investigate costs.[/dim]"
+        )
+        raise typer.Exit(code=2)
 
     # Token usage summary (print regardless of status)
     summary = result.token_summary(model_id=config.pipeline.model)

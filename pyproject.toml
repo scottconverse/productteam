@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "productteam"
-version = "2.5.4"
+version = "2.5.5"
 description = "Your AI product team. Describe what you want. Wake up to shipping code."
 readme = "README.md"
 license = { file = "LICENSE" }

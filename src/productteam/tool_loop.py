@@ -344,6 +344,8 @@ async def run_tool_loop(
     max_tool_calls: int = 50,
     timeout_seconds: float | None = None,
     loop_detection_window: int = 5,
+    cost_tracker: "CostTracker | None" = None,
+    stage_name: str = "",
 ) -> ToolLoopResult:
     """Run the builder tool-use loop.
 
@@ -361,6 +363,8 @@ async def run_tool_loop(
         max_tool_calls: Maximum tool calls before marking stuck.
         timeout_seconds: Wall-clock timeout for the entire loop. None = no limit.
         loop_detection_window: Consecutive identical calls before marking stuck.
+        cost_tracker: If set, checked after every API call; raises BudgetExceededError.
+        stage_name: Human label for budget-exceeded messages.
 
     Returns:
         ToolLoopResult with final text, call count, and status.
@@ -371,6 +375,7 @@ async def run_tool_loop(
                 _run_tool_loop_inner(
                     provider, system_prompt, initial_user_message,
                     project_dir, max_tool_calls, loop_detection_window,
+                    cost_tracker, stage_name,
                 ),
                 timeout=timeout_seconds,
             )
@@ -384,6 +389,7 @@ async def run_tool_loop(
     return await _run_tool_loop_inner(
         provider, system_prompt, initial_user_message,
         project_dir, max_tool_calls, loop_detection_window,
+        cost_tracker, stage_name,
     )
 
 
@@ -418,6 +424,8 @@ async def _run_tool_loop_inner(
     project_dir: Path,
     max_tool_calls: int = 50,
     loop_detection_window: int = 5,
+    cost_tracker: "CostTracker | None" = None,
+    stage_name: str = "",
 ) -> ToolLoopResult:
     """Inner tool loop implementation."""
     messages: list[dict] = [
@@ -443,6 +451,10 @@ async def _run_tool_loop_inner(
         total_output_tokens += usage.get("output_tokens", 0)
         total_cache_creation += usage.get("cache_creation_input_tokens", 0)
         total_cache_read += usage.get("cache_read_input_tokens", 0)
+
+        # Budget check — raises BudgetExceededError if over limit
+        if cost_tracker:
+            cost_tracker.add(usage, stage=stage_name)
 
         # Check if response has tool_use blocks
         content = response.get("content", [])

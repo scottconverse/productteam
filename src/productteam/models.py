@@ -26,6 +26,7 @@ class PipelineConfig(BaseModel):
     skills_dir: str = ".claude/skills"
     quality: str = "standard"  # "standard" | "thorough" | "strict"
     auto_approve: bool = False
+    budget_usd: float = 2.0  # Kill pipeline if estimated cost exceeds this
 
 
 class GatesConfig(BaseModel):

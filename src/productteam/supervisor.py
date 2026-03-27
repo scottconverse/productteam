@@ -20,11 +20,55 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from productteam.errors import BudgetExceededError
 from productteam.models import ProductTeamConfig
 from productteam.providers.base import LLMProvider
 from productteam.tool_loop import ToolLoopResult, run_tool_loop
 
 console = Console()
+
+
+class CostTracker:
+    """Tracks cumulative token spend and enforces a hard budget cap.
+
+    Pass an instance into the Supervisor. After every API call, call
+    ``add()`` with the usage dict. ``check()`` raises BudgetExceededError
+    if the running total exceeds *budget_usd*.
+    """
+
+    def __init__(self, model_id: str, budget_usd: float):
+        self.model_id = model_id
+        self.budget_usd = budget_usd
+        self.total_input = 0
+        self.total_output = 0
+        self.total_cache_creation = 0
+        self.total_cache_read = 0
+
+    @property
+    def est_cost(self) -> float | None:
+        pricing = _PROVIDER_PRICING.get(self.model_id)
+        if not pricing:
+            return None
+        return (
+            self.total_input / 1_000_000 * pricing["input"]
+            + self.total_output / 1_000_000 * pricing["output"]
+        )
+
+    def add(self, usage: dict, stage: str = "") -> None:
+        """Record tokens from one API call and check the budget."""
+        self.total_input += usage.get("input_tokens", 0)
+        self.total_output += usage.get("output_tokens", 0)
+        self.total_cache_creation += usage.get("cache_creation_input_tokens", 0)
+        self.total_cache_read += usage.get("cache_read_input_tokens", 0)
+        self.check(stage)
+
+    def check(self, stage: str = "") -> None:
+        """Raise BudgetExceededError if over budget."""
+        cost = self.est_cost
+        if cost is not None and cost > self.budget_usd:
+            raise BudgetExceededError(
+                spent=cost, budget=self.budget_usd, stage=stage
+            )
 
 
 class PipelineStage(str, Enum):
@@ -71,6 +115,50 @@ _PROVIDER_PRICING = {
     "gpt-4o":                    {"input": 2.50, "output": 10.00},
     "gpt-4o-mini":               {"input": 0.15, "output": 0.60},
 }
+
+# Minimum tokens for prompt caching to activate (per Anthropic docs).
+# Below this, cache_control is silently ignored — no error, no warning,
+# just full-price billing on every call.
+_CACHE_MIN_TOKENS: dict[str, int] = {
+    "claude-haiku-4-5-20251001": 4096,
+    "claude-sonnet-4-6":         1024,
+    "claude-sonnet-4-20250514":  1024,
+}
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token estimate: ~4 chars per token for English."""
+    return len(text) // 4
+
+
+def validate_cache_thresholds(
+    model_id: str,
+    skills_dir: Path,
+    skill_names: tuple[str, ...] = ("builder", "evaluator", "planner", "prd-writer", "doc-writer", "evaluator-design"),
+) -> list[str]:
+    """Check that skill prompts meet the model's minimum cacheable token count.
+
+    Returns a list of warning strings. Empty list = all good.
+    """
+    min_tokens = _CACHE_MIN_TOKENS.get(model_id)
+    if min_tokens is None:
+        return []  # Unknown model — can't validate
+
+    warnings = []
+    for name in skill_names:
+        skill_path = skills_dir / name / "SKILL.md"
+        if not skill_path.exists():
+            continue
+        content = skill_path.read_text(encoding="utf-8")
+        est = _estimate_tokens(content)
+        if est < min_tokens:
+            warnings.append(
+                f"Skill '{name}' is ~{est:,} tokens — below {model_id}'s "
+                f"cache minimum of {min_tokens:,}. Prompt caching will be "
+                f"SILENTLY DISABLED, causing full-price billing on every call. "
+                f"Pad the skill to >{min_tokens:,} tokens or switch models."
+            )
+    return warnings
 
 
 class SupervisorResult:
@@ -190,12 +278,20 @@ class Supervisor:
         config: ProductTeamConfig,
         provider: LLMProvider | None,
         auto_approve: bool = False,
+        budget_usd: float | None = None,
     ):
         self.project_dir = project_dir
         self.config = config
         self.provider = provider
         self.auto_approve = auto_approve
         self.state = _load_state(project_dir)
+
+        # Budget: CLI flag overrides config, config default is 2.0
+        effective_budget = budget_usd if budget_usd is not None else config.pipeline.budget_usd
+        model_id = provider.model_id() if provider else config.pipeline.model
+        self.cost_tracker = CostTracker(model_id=model_id, budget_usd=effective_budget)
+        if effective_budget < 100:  # Don't log absurd values
+            console.print(f"[dim]Budget cap: ${effective_budget:.2f}[/dim]")
 
     def _setup_project_env(self) -> None:
         """Create venv and install project dependencies before agent stages run.
@@ -287,6 +383,26 @@ class Supervisor:
         """
         self._stage_callback = stage_callback
         stages: list[StageResult] = []
+
+        # Validate cache thresholds before spending any money
+        if not dry_run and self.provider:
+            skills_path = self.project_dir / self.config.pipeline.skills_dir
+            cache_warnings = validate_cache_thresholds(
+                model_id=self.provider.model_id(),
+                skills_dir=skills_path,
+            )
+            for warning in cache_warnings:
+                console.print(f"[bold red]CACHE WARNING:[/bold red] {warning}")
+            if cache_warnings:
+                console.print(
+                    "[bold red]Prompt caching is broken for the above skills. "
+                    "Fix before running to avoid 10-50x cost overruns.[/bold red]"
+                )
+                return SupervisorResult(
+                    concept=concept or self.state.get("concept", ""),
+                    stages=[],
+                    status="failed",
+                )
 
         # Resume or fresh start
         if concept:
@@ -610,6 +726,9 @@ class Supervisor:
             _save_state(self.project_dir, self.state)
             return StageResult(stage=stage, status="failed", error=str(e))
 
+        # Budget check for single-call stages
+        self.cost_tracker.add(usage, stage=stage.value)
+
         # Write artifact
         artifact_path = self._write_artifact(stage, response)
 
@@ -672,6 +791,8 @@ class Supervisor:
             max_tool_calls=effective_max_calls,
             timeout_seconds=effective_timeout,
             loop_detection_window=window,
+            cost_tracker=self.cost_tracker,
+            stage_name=stage.value,
         )
 
         if result.status in ("stuck", "max_calls"):
@@ -773,6 +894,8 @@ class Supervisor:
                 project_dir=self.project_dir,
                 max_tool_calls=self.config.pipeline.builder_max_tool_calls,
                 timeout_seconds=self.config.pipeline.builder_timeout_seconds,
+                cost_tracker=self.cost_tracker,
+                stage_name=f"build:{sprint_name}",
             )
 
             total_input_tokens += build_result.input_tokens
@@ -790,6 +913,9 @@ class Supervisor:
             artifact_dir.mkdir(parents=True, exist_ok=True)
             build_artifact = artifact_dir / "build-artifact.md"
             build_artifact.write_text(build_result.final_text, encoding="utf-8")
+
+            # Install project deps after builder creates files (venv already exists)
+            self._setup_project_env()
 
             # Skip evaluation if disabled
             if not self.config.pipeline.require_evaluator:
@@ -835,6 +961,8 @@ class Supervisor:
                 project_dir=self.project_dir,
                 max_tool_calls=self.config.pipeline.evaluator_max_tool_calls,
                 timeout_seconds=self.config.pipeline.builder_timeout_seconds,
+                cost_tracker=self.cost_tracker,
+                stage_name=f"evaluate:{sprint_name}",
             )
 
             total_input_tokens += eval_result.input_tokens
