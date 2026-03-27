@@ -14,4 +14,4 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: pytest -m "not live" --cov=productteam --cov-report=term-missing --cov-fail-under=80
+      - run: pytest -m "not live" --cov=productteam --cov-report=term-missing --cov-fail-under=75

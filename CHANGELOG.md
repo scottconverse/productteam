@@ -13,6 +13,7 @@
 
 ### Infrastructure
 - 244 unit tests passing on Windows and Linux (up from 239)
+- CI coverage threshold lowered from 80% to 75% — providers (Gemini, Ollama, OpenAI) and CLI commands are only covered by live integration tests which are excluded from CI. Threshold was unachievable and CI has been red since 2.2.0.
 - Full pipeline validated end-to-end with fresh `productteam init` + `productteam run` on the bmark reference project
 
 ## [2.2.0] - 2026-03-26
