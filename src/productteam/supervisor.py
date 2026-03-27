@@ -334,6 +334,12 @@ class Supervisor:
                 stage, "doc-writer",
                 f"Write documentation for the project. Concept: {concept}",
             )
+        elif stage == PipelineStage.EVALUATE_DESIGN:
+            return await self._run_tool_loop_stage(
+                stage, "evaluator-design",
+                f"Evaluate design quality. Read docs/index.html, docs/terms.html, "
+                f"and README.md. Concept: {concept}",
+            )
         else:
             return StageResult(stage=stage, status="skipped")
 

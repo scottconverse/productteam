@@ -276,7 +276,7 @@ def run_cmd(
         None, help="The product concept to build. Optional if resuming."
     ),
     step: Optional[str] = typer.Option(
-        None, "--step", help="Run only a specific stage (prd|plan|build|evaluate|document|ship)"
+        None, "--step", help="Run only a specific stage (prd|plan|build|evaluate|document|evaluate-design|ship)"
     ),
     sprint: Optional[str] = typer.Option(
         None, "--sprint", help="Target a specific sprint (with --step build or evaluate)"

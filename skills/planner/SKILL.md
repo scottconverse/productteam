@@ -53,12 +53,15 @@ Classify as: small (1-3 files, < 200 lines) or medium (4-8 files, 200-600 lines)
 or 600 lines, split it into multiple sprints. A sprint is not a product version
 — it is one feature or one layer, fully buildable and testable in isolation.
 
-The Builder has a hard limit of 50 tool calls per sprint. Each file write costs
+The Builder has a hard limit of 75 tool calls per sprint. Each file write costs
 2-3 tool calls (write + verify). That means a sprint can produce roughly 8-12
 files maximum. Plan accordingly — **target 5-8 deliverables per sprint.**
 
-**Size limit:** If the sprint contract YAML exceeds 6KB, the sprint is too
-large and must be re-decomposed.
+**Size limit:** If the sprint contract YAML exceeds 10KB, the sprint is too
+large and must be re-decomposed. This limit catches over-decomposed sprints
+with too many deliverables — it is NOT a constraint on acceptance criteria
+depth. Detailed, testable acceptance criteria per deliverable are correct
+and expected. The real constraint is 5-8 deliverables per sprint.
 
 ### Examples of Correctly-Sized Sprints
 
