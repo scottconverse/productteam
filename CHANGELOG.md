@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.4.2] - 2026-03-26
+
+### Added
+- **`bump_version.py`** — Script to update version across all 5 locations from a single argument. Prevents stale version strings.
+- **`CONTRIBUTING.md`** — Dev setup, test running, PR guidelines for open source contributors.
+- **`doc_writer_max_tool_calls` config** — Separate tool call limit for the doc_writer stage (default: 100), independent of builder_max_tool_calls (75). Doc writer needs more calls to read all source files before writing docs.
+
+### Fixed
+- **Ollama tool-use round-trips** — Ollama provider now converts Anthropic-format tool_use/tool_result messages to Ollama's native format. Fixes 400 errors on multi-turn tool loops.
+
 ## [2.4.1] - 2026-03-26
 
 ### Security

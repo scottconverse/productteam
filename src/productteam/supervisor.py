@@ -355,6 +355,7 @@ class Supervisor:
             return await self._run_tool_loop_stage(
                 stage, "doc-writer",
                 f"Write documentation for the project. Concept: {concept}",
+                max_tool_calls=self.config.pipeline.doc_writer_max_tool_calls,
             )
         elif stage == PipelineStage.EVALUATE_DESIGN:
             return await self._run_tool_loop_stage(
@@ -431,6 +432,7 @@ class Supervisor:
         skill_name: str,
         context: str,
         timeout_seconds: float | None = None,
+        max_tool_calls: int | None = None,
     ) -> StageResult:
         """Run a doer stage (tool loop with file access)."""
         self._notify_stage(stage.value)
@@ -446,13 +448,14 @@ class Supervisor:
         _save_state(self.project_dir, self.state)
 
         effective_timeout = timeout_seconds or self.config.pipeline.builder_timeout_seconds
+        effective_max_calls = max_tool_calls or self.config.pipeline.builder_max_tool_calls
 
         result = await run_tool_loop(
             provider=self.provider,
             system_prompt=system_prompt,
             initial_user_message=context,
             project_dir=self.project_dir,
-            max_tool_calls=self.config.pipeline.builder_max_tool_calls,
+            max_tool_calls=effective_max_calls,
             timeout_seconds=effective_timeout,
         )
 
