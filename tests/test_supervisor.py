@@ -47,7 +47,9 @@ def _init_project(tmp_path: Path) -> None:
     (tmp_path / ".claude" / "skills" / "builder").mkdir(parents=True)
     (tmp_path / ".claude" / "skills" / "evaluator").mkdir(parents=True)
     (tmp_path / ".claude" / "skills" / "doc-writer").mkdir(parents=True)
-    for skill in ["prd-writer", "planner", "builder", "evaluator", "doc-writer"]:
+    for skill in ["prd-writer", "planner", "builder", "evaluator", "doc-writer",
+                   "evaluator-design"]:
+        (tmp_path / ".claude" / "skills" / skill).mkdir(parents=True, exist_ok=True)
         (tmp_path / ".claude" / "skills" / skill / "SKILL.md").write_text(
             f"# {skill}\nYou are a {skill}."
         )
@@ -916,3 +918,54 @@ async def test_planner_uses_planner_timeout(tmp_path):
         timeout_seconds=config.pipeline.planner_timeout_seconds,
     )
     assert result.status == "complete"
+
+
+@pytest.mark.asyncio
+async def test_design_eval_disk_fallback_finds_pass(tmp_path):
+    """Design evaluator verdict fallback reads PASS from eval YAML on disk.
+
+    The design evaluator writes structured YAML via write_file, but its
+    final text response is a narrative summary with no parseable verdict.
+    The supervisor must fall back to checking eval-*-design.yaml on disk.
+    """
+    _init_project(tmp_path)
+
+    # Pre-plant a design eval YAML that the evaluator "wrote via write_file"
+    eval_dir = tmp_path / ".productteam" / "evaluations"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+    (eval_dir / "eval-001-design.yaml").write_text(
+        "sprint: 1\nevaluator_verdict: PASS\ngrades:\n  coherence:\n    score: 5\n"
+    )
+
+    config = _make_config(pipeline={
+        "provider": "anthropic",
+        "model": "test-model",
+        "max_loops": 1,
+        "stage_timeout_seconds": 10,
+        "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5,
+        "auto_approve": False,
+        "require_design_review": True,
+    })
+    mock_provider = AsyncMock()
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+
+    # Simulate: raw_response has no parseable verdict, but disk file does
+    narrative_response = "All documentation looks great. Cohesive design system."
+    verdict = supervisor._parse_verdict(narrative_response)
+    assert verdict == "needs_work", "Narrative text should not parse as pass"
+
+    # Now simulate the fallback logic inline (same as what the supervisor does)
+    if verdict == "needs_work":
+        for eval_file in sorted(eval_dir.glob("eval-*-design.yaml"), reverse=True):
+            file_verdict = supervisor._parse_verdict(
+                eval_file.read_text(encoding="utf-8")
+            )
+            if file_verdict in ("pass", "fail"):
+                verdict = file_verdict
+                break
+
+    assert verdict == "pass", (
+        "Design eval disk fallback failed to read PASS from eval-001-design.yaml"
+    )

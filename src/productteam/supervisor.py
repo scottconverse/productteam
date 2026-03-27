@@ -285,6 +285,21 @@ class Supervisor:
                     return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
                 verdict = self._parse_verdict(result.raw_response)
+                if verdict == "needs_work":
+                    # Fallback: check eval YAML files written to disk by the
+                    # design evaluator via write_file (same pattern as build eval)
+                    eval_dir = self.project_dir / ".productteam" / "evaluations"
+                    for eval_file in sorted(eval_dir.glob("eval-*-design.yaml"), reverse=True):
+                        try:
+                            file_verdict = self._parse_verdict(
+                                eval_file.read_text(encoding="utf-8")
+                            )
+                            if file_verdict in ("pass", "fail"):
+                                verdict = file_verdict
+                                console.print(f"  [dim](verdict from {eval_file.name})[/dim]")
+                                break
+                        except Exception:
+                            continue
                 console.print(f"  Design verdict: [{'green' if verdict == 'pass' else 'red'}]{verdict}[/]")
                 if verdict != "pass":
                     console.print(
