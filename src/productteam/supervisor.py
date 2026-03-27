@@ -470,6 +470,7 @@ class Supervisor:
                 f"Quality level: {self.config.pipeline.quality}\n\n"
                 f"Evaluate design quality. Read docs/index.html, docs/terms.html, "
                 f"and README.md. Concept: {concept}",
+                max_tool_calls=self.config.pipeline.evaluator_max_tool_calls,
             )
         else:
             return StageResult(stage=stage, status="skipped")
@@ -738,9 +739,22 @@ class Supervisor:
                     stage=PipelineStage.EVALUATE, status="failed", error=str(e)
                 )
 
+            # Check for dependency files so evaluator knows to install before testing
+            dep_hint = ""
+            for dep_file in ["requirements.txt", "pyproject.toml", "setup.py"]:
+                dep_path = self.project_dir / dep_file
+                if dep_path.exists():
+                    dep_hint = (
+                        f"\nDependency file present: {dep_file}\n"
+                        f"Run `pip install -e .` or `pip install -r requirements.txt` "
+                        f"once before testing.\n"
+                    )
+                    break
+
             eval_prompt = (
-                f"Evaluate sprint {sprint_name} (loop {loop_num}/{max_loops}).\n\n"
                 f"Quality level: {self.config.pipeline.quality}\n\n"
+                f"Evaluate sprint {sprint_name} (loop {loop_num}/{max_loops}).\n"
+                f"{dep_hint}\n"
                 f"Sprint contract:\n{sprint_contract}\n\n"
                 f"Builder output:\n{build_result.final_text}"
             )
@@ -750,7 +764,7 @@ class Supervisor:
                 system_prompt=eval_system,
                 initial_user_message=eval_prompt,
                 project_dir=self.project_dir,
-                max_tool_calls=self.config.pipeline.builder_max_tool_calls,
+                max_tool_calls=self.config.pipeline.evaluator_max_tool_calls,
                 timeout_seconds=self.config.pipeline.builder_timeout_seconds,
             )
 

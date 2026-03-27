@@ -21,6 +21,7 @@ class PipelineConfig(BaseModel):
     planner_timeout_seconds: int = 600
     builder_timeout_seconds: int = 600
     builder_max_tool_calls: int = 75
+    evaluator_max_tool_calls: int = 25
     doc_writer_max_tool_calls: int = 100
     skills_dir: str = ".claude/skills"
     quality: str = "standard"  # "standard" | "thorough" | "strict"

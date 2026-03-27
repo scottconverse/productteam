@@ -48,7 +48,14 @@ For each deliverable in order:
 
 ### Step 4: Run Tests
 
-After implementing all deliverables, run the test suite. Fix any failures. Do not move to the next step with failing tests.
+Before running tests, install project dependencies:
+- If `pyproject.toml` exists: `pip install -e .`
+- If `requirements.txt` exists: `pip install -r requirements.txt`
+- Run installation exactly once. If it fails, document it in your build summary.
+
+Then run: `python -m pytest tests/ -v`
+
+Fix any failures. Do not move to the next step with failing tests.
 
 ### Step 5: Self-Checklist (Not Self-Evaluation)
 

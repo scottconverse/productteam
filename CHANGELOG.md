@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.3] - 2026-03-27
+
+### Fixed
+- **Evaluator installs dependencies before testing** — Evaluator was running `pytest` without installing project dependencies, getting `ModuleNotFoundError`, returning NEEDS_WORK, triggering infinite build-evaluate loops. Now installs deps exactly once via `pip install -e .` or `pip install -r requirements.txt` before running tests. Same fix applied to Builder skill.
+- **Supervisor injects dependency hint into eval prompt** — When `requirements.txt`, `pyproject.toml`, or `setup.py` exists, the evaluator prompt now includes an explicit instruction to install dependencies before testing.
+- **Evaluator max tool calls raised to 25** — With dep installation + test execution + file reads, 15 calls was too tight for standard quality. Raised to 25 to accommodate the install-then-test workflow.
+
 ## [2.5.2] - 2026-03-27
 
 ### Fixed
