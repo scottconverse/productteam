@@ -47,12 +47,26 @@ class StageResult:
         artifact_path: str = "",
         raw_response: str = "",
         error: str = "",
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ):
         self.stage = stage
         self.status = status  # "complete" | "stuck" | "failed" | "skipped"
         self.artifact_path = artifact_path
         self.raw_response = raw_response
         self.error = error
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+
+
+# Pricing per million tokens (update as providers change pricing)
+_PROVIDER_PRICING = {
+    "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
+    "claude-sonnet-4-6":         {"input": 3.00, "output": 15.00},
+    "claude-sonnet-4-20250514":  {"input": 3.00, "output": 15.00},
+    "gpt-4o":                    {"input": 2.50, "output": 10.00},
+    "gpt-4o-mini":               {"input": 0.15, "output": 0.60},
+}
 
 
 class SupervisorResult:
@@ -67,6 +81,33 @@ class SupervisorResult:
         self.concept = concept
         self.stages = stages
         self.status = status  # "complete" | "stuck" | "failed" | "partial"
+
+    def token_summary(self, model_id: str = "") -> dict:
+        """Return token usage and estimated cost across all stages."""
+        total_input = sum(s.input_tokens for s in self.stages)
+        total_output = sum(s.output_tokens for s in self.stages)
+
+        pricing = _PROVIDER_PRICING.get(model_id, {})
+        est_cost = None
+        if pricing:
+            est_cost = (
+                total_input / 1_000_000 * pricing["input"]
+                + total_output / 1_000_000 * pricing["output"]
+            )
+
+        return {
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "est_cost_usd": round(est_cost, 4) if est_cost is not None else None,
+            "by_stage": [
+                {
+                    "stage": s.stage.value,
+                    "input_tokens": s.input_tokens,
+                    "output_tokens": s.output_tokens,
+                }
+                for s in self.stages
+            ],
+        }
 
 
 SCHEMA_VERSION = 1
@@ -183,9 +224,49 @@ class Supervisor:
         concept = self.state["concept"]
 
         if dry_run:
+            # Estimate based on typical token usage per stage
+            STAGE_ESTIMATES = {
+                "prd":              {"input": 15_000,  "output": 3_000},
+                "plan":             {"input": 40_000,  "output": 8_000},
+                "build_per_sprint": {"input": 120_000, "output": 15_000},
+                "eval_per_sprint":  {"input": 60_000,  "output": 8_000},
+                "document":         {"input": 80_000,  "output": 10_000},
+                "evaluate_design":  {"input": 40_000,  "output": 5_000},
+            }
+
+            concept_words = len(concept.split())
+            est_sprints = max(1, min(6, concept_words // 30))
+
+            total_input = (
+                STAGE_ESTIMATES["prd"]["input"]
+                + STAGE_ESTIMATES["plan"]["input"]
+                + (STAGE_ESTIMATES["build_per_sprint"]["input"] * est_sprints)
+                + (STAGE_ESTIMATES["eval_per_sprint"]["input"] * est_sprints)
+                + STAGE_ESTIMATES["document"]["input"]
+                + STAGE_ESTIMATES["evaluate_design"]["input"]
+            )
+            total_output = (
+                STAGE_ESTIMATES["prd"]["output"]
+                + STAGE_ESTIMATES["plan"]["output"]
+                + (STAGE_ESTIMATES["build_per_sprint"]["output"] * est_sprints)
+                + (STAGE_ESTIMATES["eval_per_sprint"]["output"] * est_sprints)
+                + STAGE_ESTIMATES["document"]["output"]
+                + STAGE_ESTIMATES["evaluate_design"]["output"]
+            )
+
             console.print("[dim]Dry run — no LLM calls will be made[/dim]")
-            for stage_name in ["prd", "plan", "build", "evaluate", "document", "ship"]:
-                console.print(f"  Would run: {stage_name}")
+            console.print(f"\n[bold]Estimated pipeline for:[/bold] {concept[:60]}...")
+            console.print(f"  Estimated sprints: {est_sprints}")
+            console.print(f"  Estimated tokens:  {total_input:,} input / {total_output:,} output")
+            console.print()
+            console.print("  [bold]Estimated cost by model:[/bold]")
+            for model_name, pricing in _PROVIDER_PRICING.items():
+                cost = (total_input / 1e6 * pricing["input"]) + (total_output / 1e6 * pricing["output"])
+                console.print(f"    {model_name:<40} ${cost:.3f}")
+            console.print()
+            console.print("  [dim]Note: Estimates are rough. Complex concepts cost more.[/dim]")
+            console.print("  [dim]Use quality=standard (default) to minimize cost.[/dim]")
+
             return SupervisorResult(concept=concept, stages=[], status="complete")
 
         # Single step mode
@@ -427,7 +508,7 @@ class Supervisor:
         _save_state(self.project_dir, self.state)
 
         try:
-            response = await asyncio.wait_for(
+            response, usage = await asyncio.wait_for(
                 self.provider.complete(
                     system=system_prompt,
                     messages=[{"role": "user", "content": context}],
@@ -459,6 +540,8 @@ class Supervisor:
             status="complete",
             artifact_path=artifact_path,
             raw_response=response,
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
         )
 
     async def _run_tool_loop_stage(
@@ -502,6 +585,8 @@ class Supervisor:
                 stage=stage,
                 status="stuck",
                 error=result.final_text,
+                input_tokens=result.input_tokens,
+                output_tokens=result.output_tokens,
             )
 
         # Write artifact
@@ -519,6 +604,8 @@ class Supervisor:
             status="complete",
             artifact_path=artifact_path,
             raw_response=result.final_text,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
         )
 
     async def _build_evaluate_loop(self, sprint_name: str) -> StageResult:
@@ -618,6 +705,7 @@ class Supervisor:
 
             eval_prompt = (
                 f"Evaluate sprint {sprint_name} (loop {loop_num}/{max_loops}).\n\n"
+                f"Quality level: {self.config.pipeline.quality}\n\n"
                 f"Sprint contract:\n{sprint_contract}\n\n"
                 f"Builder output:\n{build_result.final_text}"
             )

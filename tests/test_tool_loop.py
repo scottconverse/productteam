@@ -11,9 +11,11 @@ import pytest
 
 from productteam.tool_loop import (
     BUILDER_TOOLS,
+    _MAX_HISTORY_EXCHANGES,
     _SHELL_FEATURE_RE,
     _check_write_restricted,
     _execute_tool,
+    _truncate_messages,
     _validate_command,
     _validate_path,
     run_tool_loop,
@@ -583,3 +585,64 @@ def test_execute_write_file_productteam_sprints_allowed(tmp_path):
     data = json.loads(result)
     assert data.get("success") is True
     assert (tmp_path / ".productteam" / "sprints" / "sprint-1.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# Conversation history truncation tests
+# ---------------------------------------------------------------------------
+
+
+def test_truncate_messages_preserves_first_message():
+    """Initial task message is always in the truncated result."""
+    messages = [{"role": "user", "content": "INITIAL TASK"}]
+    for i in range(30):
+        messages.append({"role": "assistant", "content": [{"type": "tool_use", "id": f"t{i}"}]})
+        messages.append({"role": "user", "content": [{"type": "tool_result", "content": f"result {i}"}]})
+
+    truncated = _truncate_messages(messages)
+    assert truncated[0] == {"role": "user", "content": "INITIAL TASK"}
+
+
+def test_truncate_messages_limits_history():
+    """After truncation, only first + last N exchange pairs remain."""
+    messages = [{"role": "user", "content": "task"}]
+    for i in range(30):
+        messages.append({"role": "assistant", "content": f"call {i}"})
+        messages.append({"role": "user", "content": f"result {i}"})
+
+    truncated = _truncate_messages(messages)
+    # Should be: 1 (initial) + MAX_HISTORY_EXCHANGES * 2 (exchanges)
+    assert len(truncated) == 1 + _MAX_HISTORY_EXCHANGES * 2
+
+
+@pytest.mark.asyncio
+async def test_token_counts_in_tool_loop_result(tmp_path):
+    """ToolLoopResult accumulates token counts from provider responses."""
+    mock_provider = AsyncMock()
+    mock_provider.complete_with_tools = AsyncMock(return_value={
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Done."}],
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 1000, "output_tokens": 50},
+    })
+
+    result = await run_tool_loop(
+        provider=mock_provider,
+        system_prompt="You are a builder.",
+        initial_user_message="Build something.",
+        project_dir=tmp_path,
+    )
+
+    assert result.input_tokens == 1000
+    assert result.output_tokens == 50
+
+
+def test_truncate_messages_no_op_when_short():
+    """Short histories are returned unchanged."""
+    messages = [
+        {"role": "user", "content": "task"},
+        {"role": "assistant", "content": "call 1"},
+        {"role": "user", "content": "result 1"},
+    ]
+    truncated = _truncate_messages(messages)
+    assert truncated == messages

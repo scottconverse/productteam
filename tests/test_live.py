@@ -27,13 +27,15 @@ pytestmark = pytest.mark.live
 @pytest.mark.asyncio
 async def test_live_provider_complete(live_provider: LLMProvider):
     """Provider can make a basic completion call."""
-    result = await live_provider.complete(
+    text, usage = await live_provider.complete(
         system="You are a helpful assistant. Reply in one sentence.",
         messages=[{"role": "user", "content": "Say hello."}],
         max_tokens=64,
     )
-    assert isinstance(result, str)
-    assert len(result) > 0
+    assert isinstance(text, str)
+    assert len(text) > 0
+    assert isinstance(usage, dict)
+    assert "input_tokens" in usage
 
 
 @pytest.mark.asyncio

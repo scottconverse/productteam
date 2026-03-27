@@ -36,7 +36,7 @@ class OpenAIProvider(LLMProvider):
         system: str,
         messages: list[dict],
         max_tokens: int = 8192,
-    ) -> str:
+    ) -> tuple[str, dict]:
         msgs = [{"role": "system", "content": system}] + messages
         payload = {
             "model": self._model,
@@ -55,7 +55,12 @@ class OpenAIProvider(LLMProvider):
             )
             resp.raise_for_status()
             data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        usage_data = data.get("usage", {})
+        usage = {
+            "input_tokens": usage_data.get("prompt_tokens", 0),
+            "output_tokens": usage_data.get("completion_tokens", 0),
+        }
+        return data["choices"][0]["message"]["content"], usage
 
     async def complete_with_tools(
         self,
@@ -113,10 +118,15 @@ class OpenAIProvider(LLMProvider):
             })
 
         stop_reason = "tool_use" if msg.get("tool_calls") else "end_turn"
+        usage_data = data.get("usage", {})
         return {
             "role": "assistant",
             "content": content,
             "stop_reason": stop_reason,
+            "usage": {
+                "input_tokens": usage_data.get("prompt_tokens", 0),
+                "output_tokens": usage_data.get("completion_tokens", 0),
+            },
         }
 
     def name(self) -> str:

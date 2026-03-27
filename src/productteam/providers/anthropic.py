@@ -28,19 +28,19 @@ class AnthropicProvider(LLMProvider):
         system: str,
         messages: list[dict],
         max_tokens: int = 8192,
-    ) -> str:
+    ) -> tuple[str, dict]:
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=max_tokens,
             system=system,
             messages=messages,
         )
-        # Extract text from content blocks
-        parts = []
-        for block in response.content:
-            if hasattr(block, "text"):
-                parts.append(block.text)
-        return "\n".join(parts)
+        parts = [block.text for block in response.content if hasattr(block, "text")]
+        usage = {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+        return "\n".join(parts), usage
 
     async def complete_with_tools(
         self,
@@ -72,6 +72,10 @@ class AnthropicProvider(LLMProvider):
             "role": "assistant",
             "content": content,
             "stop_reason": response.stop_reason,
+            "usage": {
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            },
         }
 
     def name(self) -> str:

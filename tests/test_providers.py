@@ -115,8 +115,13 @@ async def test_anthropic_complete(monkeypatch):
     mock_block.text = "Hello from Claude"
     mock_block.type = "text"
 
+    mock_usage = MagicMock()
+    mock_usage.input_tokens = 100
+    mock_usage.output_tokens = 20
+
     mock_response = MagicMock()
     mock_response.content = [mock_block]
+    mock_response.usage = mock_usage
 
     mock_client = AsyncMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
@@ -124,12 +129,14 @@ async def test_anthropic_complete(monkeypatch):
     with patch("productteam.providers.anthropic.anthropic") as mock_sdk:
         mock_sdk.AsyncAnthropic = MagicMock(return_value=mock_client)
         p = get_provider(provider="anthropic")
-        result = await p.complete(
+        text, usage = await p.complete(
             system="You are helpful.",
             messages=[{"role": "user", "content": "Hi"}],
         )
 
-    assert result == "Hello from Claude"
+    assert text == "Hello from Claude"
+    assert usage["input_tokens"] == 100
+    assert usage["output_tokens"] == 20
 
 
 @pytest.mark.asyncio
@@ -195,7 +202,9 @@ async def test_openai_complete(monkeypatch):
             messages=[{"role": "user", "content": "Hi"}],
         )
 
-    assert result == "Hello from GPT"
+    text, usage = result
+    assert text == "Hello from GPT"
+    assert usage["input_tokens"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +235,9 @@ async def test_ollama_complete():
             messages=[{"role": "user", "content": "Hi"}],
         )
 
-    assert result == "Hello from Llama"
+    text, usage = result
+    assert text == "Hello from Llama"
+    assert usage["input_tokens"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +275,9 @@ async def test_gemini_complete(monkeypatch):
             messages=[{"role": "user", "content": "Hi"}],
         )
 
-    assert result == "Hello from Gemini"
+    text, usage = result
+    assert text == "Hello from Gemini"
+    assert usage["input_tokens"] == 0
 
 
 @pytest.mark.asyncio

@@ -45,7 +45,8 @@ class OllamaProvider(LLMProvider):
             )
             resp.raise_for_status()
             data = resp.json()
-        return data["message"]["content"]
+        usage = {"input_tokens": 0, "output_tokens": 0}
+        return data["message"]["content"], usage
 
     @staticmethod
     def _convert_messages(messages: list[dict]) -> list[dict]:
@@ -161,6 +162,7 @@ class OllamaProvider(LLMProvider):
             "role": "assistant",
             "content": content,
             "stop_reason": stop_reason,
+            "usage": {"input_tokens": 0, "output_tokens": 0},
         }
 
     def name(self) -> str:

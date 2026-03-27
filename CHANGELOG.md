@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.5.0] - 2026-03-27
+
+### Added
+- **Conversation history truncation** — Tool loops now keep only the initial task + last 10 exchanges when calling the LLM. Prevents O(n²) token growth that was the root cause of $57 pipeline runs. Total input tokens reduced ~7x for a typical 75-call loop.
+- **Token tracking** — All providers now return input/output token counts. `ToolLoopResult`, `StageResult`, and `SupervisorResult` accumulate tokens. Post-run summary shows total tokens and estimated cost.
+- **Cost estimate in `--dry-run`** — `productteam run --dry-run` now prints estimated token usage and cost for each supported model before making any API calls.
+- **Quality levels** — New `quality` config option (`standard`/`thorough`/`strict`) controls evaluator depth. `standard` (default) skips adversarial testing and aims for 10-15 tool calls. `strict` preserves the old full-adversarial behavior.
+- **Cost section in README** — Documents expected costs, cost-saving tips, and model comparison.
+
+### Changed
+- **`builder_max_tool_calls` reverted to 75** — The raise to 150 was the wrong fix for the token growth problem. With truncation, 75 is correct.
+
+### Fixed
+- **`run_bash` subprocess encoding** — Uses `encoding="utf-8"` explicitly, fixing Windows `UnicodeDecodeError` on LLM output with Unicode characters.
+
 ## [2.4.4] - 2026-03-27
 
 ### Fixed

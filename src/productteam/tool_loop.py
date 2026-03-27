@@ -321,11 +321,15 @@ class ToolLoopResult:
         tool_call_count: int,
         status: str,
         messages: list[dict],
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ):
         self.final_text = final_text
         self.tool_call_count = tool_call_count
         self.status = status  # "complete" | "stuck" | "max_calls"
         self.messages = messages
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
 
 
 async def run_tool_loop(
@@ -377,6 +381,30 @@ async def run_tool_loop(
     )
 
 
+_MAX_HISTORY_EXCHANGES = 10  # Keep last 10 tool call/result pairs
+
+
+def _truncate_messages(messages: list[dict]) -> list[dict]:
+    """Keep the initial task message plus the last N tool exchanges.
+
+    Prevents O(n²) token growth in long tool loops. Each exchange is
+    2 messages: assistant (tool_use) + user (tool_result).
+    The initial user message is always preserved so the model remembers
+    what it was asked to do.
+    """
+    if len(messages) <= 1:
+        return messages
+
+    first = messages[:1]           # Always keep the initial task
+    rest = messages[1:]            # Everything after the task
+    max_msgs = _MAX_HISTORY_EXCHANGES * 2  # Each exchange = 2 messages
+
+    if len(rest) <= max_msgs:
+        return messages            # No truncation needed yet
+
+    return first + rest[-max_msgs:]  # Task + last N exchanges
+
+
 async def _run_tool_loop_inner(
     provider: LLMProvider,
     system_prompt: str,
@@ -389,14 +417,21 @@ async def _run_tool_loop_inner(
         {"role": "user", "content": initial_user_message},
     ]
     total_tool_calls = 0
+    total_input_tokens = 0
+    total_output_tokens = 0
     last_tool_calls: list[tuple[str, str]] = []  # (name, args_hash) for loop detection
 
     while True:
         response = await provider.complete_with_tools(
             system=system_prompt,
-            messages=messages,
+            messages=_truncate_messages(messages),
             tools=BUILDER_TOOLS,
         )
+
+        # Accumulate token usage
+        usage = response.get("usage", {})
+        total_input_tokens += usage.get("input_tokens", 0)
+        total_output_tokens += usage.get("output_tokens", 0)
 
         # Check if response has tool_use blocks
         content = response.get("content", [])
@@ -411,6 +446,8 @@ async def _run_tool_loop_inner(
                 tool_call_count=total_tool_calls,
                 status="complete",
                 messages=messages,
+                input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens,
             )
 
         # Append assistant message to conversation
@@ -439,6 +476,8 @@ async def _run_tool_loop_inner(
                     tool_call_count=total_tool_calls,
                     status="stuck",
                     messages=messages,
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
                 )
 
             # Execute the tool
@@ -460,4 +499,6 @@ async def _run_tool_loop_inner(
                 tool_call_count=total_tool_calls,
                 status="max_calls",
                 messages=messages,
+                input_tokens=total_input_tokens,
+                output_tokens=total_output_tokens,
             )

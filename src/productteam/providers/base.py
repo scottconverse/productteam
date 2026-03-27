@@ -14,8 +14,11 @@ class LLMProvider(ABC):
         system: str,
         messages: list[dict],
         max_tokens: int = 8192,
-    ) -> str:
-        """Return the assistant's text response."""
+    ) -> tuple[str, dict]:
+        """Return (assistant_text, usage_dict).
+
+        usage_dict has keys: input_tokens (int), output_tokens (int)
+        """
         ...
 
     @abstractmethod
@@ -32,6 +35,7 @@ class LLMProvider(ABC):
           - "role": "assistant"
           - "content": list of content blocks (text and/or tool_use)
           - "stop_reason": str
+          - "usage": {"input_tokens": int, "output_tokens": int}
         """
         ...
 

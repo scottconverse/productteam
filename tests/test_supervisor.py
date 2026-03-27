@@ -12,6 +12,7 @@ from productteam.models import ProductTeamConfig
 from productteam.supervisor import (
     PipelineStage,
     StageResult,
+    SupervisorResult,
     Supervisor,
     _load_skill,
     _load_state,
@@ -116,7 +117,7 @@ async def test_supervisor_prd_stage(tmp_path):
     config = _make_config()
 
     mock_provider = AsyncMock()
-    mock_provider.complete = AsyncMock(return_value="# PRD\n\nThis is the PRD.")
+    mock_provider.complete = AsyncMock(return_value=("# PRD\n\nThis is the PRD.", {"input_tokens": 0, "output_tokens": 0}))
     mock_provider.complete_with_tools = AsyncMock()
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
@@ -612,7 +613,7 @@ async def test_full_pipeline_two_sprints(tmp_path):
 
     # Thinker stages use provider.complete:
     #   1. PRD only (Planner is now a doer)
-    mock_provider.complete = AsyncMock(return_value="# PRD\nA CLI tool.")
+    mock_provider.complete = AsyncMock(return_value=("# PRD\nA CLI tool.", {"input_tokens": 0, "output_tokens": 0}))
 
     # Doer stages use provider.complete_with_tools (via tool loop):
     #   Plan, Sprint 1 (builder → evaluator), Sprint 2, Document, Design eval
@@ -658,7 +659,7 @@ async def test_full_pipeline_sprint_fails_stops_pipeline(tmp_path):
         "require_design_review": False,
     })
     mock_provider = AsyncMock()
-    mock_provider.complete = AsyncMock(return_value="# PRD\nA tool.")
+    mock_provider.complete = AsyncMock(return_value=("# PRD\nA tool.", {"input_tokens": 0, "output_tokens": 0}))
 
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
         _eval_response("Plan written."),
@@ -768,7 +769,7 @@ async def test_multi_sprint_sequencing(tmp_path):
                 seen_sprints.append(s)
         return _eval_response("evaluator_verdict: PASS\nDone.")
 
-    mock_provider.complete = AsyncMock(return_value="# PRD")
+    mock_provider.complete = AsyncMock(return_value=("# PRD", {"input_tokens": 0, "output_tokens": 0}))
     mock_provider.complete_with_tools = AsyncMock(side_effect=track_complete_with_tools)
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
@@ -827,7 +828,7 @@ async def test_pipeline_fails_when_no_sprints_after_plan(tmp_path):
         "auto_approve": False, "require_design_review": False,
     })
     mock_provider = AsyncMock()
-    mock_provider.complete = AsyncMock(return_value="# PRD\nA CLI tool.")
+    mock_provider.complete = AsyncMock(return_value=("# PRD\nA CLI tool.", {"input_tokens": 0, "output_tokens": 0}))
     # Planner completes but writes no YAML files
     mock_provider.complete_with_tools = AsyncMock(return_value={
         "role": "assistant",
@@ -859,7 +860,7 @@ async def test_doc_writer_skipped_when_no_sprints_passed(tmp_path):
         "auto_approve": False, "require_design_review": False,
     })
     mock_provider = AsyncMock()
-    mock_provider.complete = AsyncMock(return_value="# PRD\nA tool.")
+    mock_provider.complete = AsyncMock(return_value=("# PRD\nA tool.", {"input_tokens": 0, "output_tokens": 0}))
 
     # Planner writes no new files (sprint-001 already exists)
     # Builder + Evaluator FAIL
@@ -991,7 +992,7 @@ async def test_stage_callback_called_during_pipeline(tmp_path):
     _init_project(tmp_path)
     config = _make_config()
     mock_provider = AsyncMock()
-    mock_provider.complete = AsyncMock(return_value="PRD content here.")
+    mock_provider.complete = AsyncMock(return_value=("PRD content here.", {"input_tokens": 0, "output_tokens": 0}))
 
     stages_seen: list[str] = []
 
@@ -1248,3 +1249,30 @@ async def test_tool_loop_stage_skill_not_found(tmp_path):
     )
     assert result.status == "failed"
     assert "Skill not found" in result.error
+
+
+# ---------------------------------------------------------------------------
+# Token tracking tests
+# ---------------------------------------------------------------------------
+
+
+def test_stage_result_has_token_fields():
+    """StageResult has input_tokens and output_tokens fields."""
+    result = StageResult(stage=PipelineStage.PRD, status="complete",
+                         input_tokens=5000, output_tokens=300)
+    assert result.input_tokens == 5000
+    assert result.output_tokens == 300
+
+
+def test_supervisor_result_token_summary():
+    """token_summary() aggregates tokens across stages."""
+    stages = [
+        StageResult(PipelineStage.PRD, "complete", input_tokens=10000, output_tokens=500),
+        StageResult(PipelineStage.PLAN, "complete", input_tokens=20000, output_tokens=1000),
+    ]
+    result = SupervisorResult(concept="test", stages=stages, status="complete")
+    summary = result.token_summary(model_id="claude-haiku-4-5-20251001")
+    assert summary["total_input_tokens"] == 30000
+    assert summary["total_output_tokens"] == 1500
+    assert summary["est_cost_usd"] is not None
+    assert summary["est_cost_usd"] > 0

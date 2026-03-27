@@ -183,6 +183,33 @@ ProductTeam runs LLM-generated shell commands on your machine. That's inherently
 
 ---
 
+## Cost
+
+ProductTeam makes LLM API calls at every pipeline stage. Estimated costs
+for a typical small project (2-3 sprints, `quality = "standard"`):
+
+| Model | Est. Cost |
+|-------|-----------|
+| Claude Haiku | $0.10 – $0.40 |
+| Claude Sonnet | $0.50 – $2.00 |
+| Ollama (local) | Free |
+
+Costs scale with:
+- **Concept complexity** — more features = more sprints = more tokens
+- **Quality level** — `strict` costs 3-5x more than `standard`
+- **Model choice** — Haiku is ~4x cheaper than Sonnet per token
+
+**To minimize cost:**
+- Use `quality = "standard"` in `productteam.toml` (default)
+- Use Haiku or a local Ollama model for development iteration
+- Use `productteam run --dry-run` to estimate cost before running
+- Use Sonnet with `quality = "thorough"` for release candidates
+
+**To see what you spent:**
+After each run, ProductTeam prints token usage and estimated cost.
+
+---
+
 ## Configuration
 
 All configuration lives in `productteam.toml`:
@@ -193,6 +220,7 @@ provider = "anthropic"          # anthropic | openai | ollama | gemini
 model = "claude-sonnet-4-6"
 max_loops = 3                   # build-evaluate iterations (increase for complex features)
 max_sprints = 8                 # max sprint contracts
+quality = "standard"            # standard | thorough | strict (controls eval depth + cost)
 builder_max_tool_calls = 75     # tool call limit per doer run
 auto_approve = false            # true for headless/CI mode
 

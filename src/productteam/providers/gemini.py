@@ -57,12 +57,17 @@ class GeminiProvider(LLMProvider):
             resp.raise_for_status()
             data = resp.json()
 
-        # Extract text from response
+        # Extract text and usage from response
+        usage_meta = data.get("usageMetadata", {})
+        usage = {
+            "input_tokens": usage_meta.get("promptTokenCount", 0),
+            "output_tokens": usage_meta.get("candidatesTokenCount", 0),
+        }
         candidates = data.get("candidates", [])
         if not candidates:
-            return ""
+            return "", usage
         parts = candidates[0].get("content", {}).get("parts", [])
-        return "".join(p.get("text", "") for p in parts)
+        return "".join(p.get("text", "") for p in parts), usage
 
     async def complete_with_tools(
         self,
@@ -136,10 +141,15 @@ class GeminiProvider(LLMProvider):
                     })
 
         has_tool_use = any(c["type"] == "tool_use" for c in content)
+        usage_meta = data.get("usageMetadata", {})
         return {
             "role": "assistant",
             "content": content,
             "stop_reason": "tool_use" if has_tool_use else "end_turn",
+            "usage": {
+                "input_tokens": usage_meta.get("promptTokenCount", 0),
+                "output_tokens": usage_meta.get("candidatesTokenCount", 0),
+            },
         }
 
     def name(self) -> str:

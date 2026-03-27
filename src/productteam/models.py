@@ -20,9 +20,10 @@ class PipelineConfig(BaseModel):
     stage_timeout_seconds: int = 300
     planner_timeout_seconds: int = 600
     builder_timeout_seconds: int = 600
-    builder_max_tool_calls: int = 150
+    builder_max_tool_calls: int = 75
     doc_writer_max_tool_calls: int = 100
     skills_dir: str = ".claude/skills"
+    quality: str = "standard"  # "standard" | "thorough" | "strict"
     auto_approve: bool = False
 
 

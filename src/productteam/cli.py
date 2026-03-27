@@ -367,6 +367,17 @@ def run_cmd(
         )
     )
 
+    # Token usage summary (print regardless of status)
+    summary = result.token_summary(model_id=config.pipeline.model)
+    total_in = summary["total_input_tokens"]
+    total_out = summary["total_output_tokens"]
+    if total_in > 0:
+        console.print(f"\n[dim]Token usage: {total_in:,} input / {total_out:,} output[/dim]")
+        if summary["est_cost_usd"] is not None:
+            console.print(f"[dim]Estimated cost: ${summary['est_cost_usd']:.4f}[/dim]")
+        else:
+            console.print(f"[dim](Cost estimate not available for model: {config.pipeline.model})[/dim]")
+
     if result.status == "complete":
         console.print("\n[bold green]Pipeline complete.[/bold green]")
     elif result.status == "partial":
