@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.5.4] - 2026-03-27
+
+### Added
+- **`_setup_project_env()` on Supervisor** — Creates `.venv` and installs project dependencies (via `pip install -e .` or `pip install -r requirements.txt`) before agent stages run. Zero token cost. Eliminates the $13 eval loop problem where agents burned hundreds of tool calls trying to install packages themselves.
+- **Prompt caching enabled** — Anthropic API requests now send system prompts with `cache_control: {"type": "ephemeral"}`. Calls 2-75 in a tool loop hit cache on the system prompt, reducing input token costs ~88% on repeated calls.
+
+### Changed
+- **Evaluator loop detection tightened to 3** — With deps pre-installed, the evaluator has no reason to make 5 identical calls. Reverted to window of 3 for evaluator stages, kept 8 for doc writer, 5 for builder.
+- **Builder and evaluator skills no longer install deps** — Skills updated to say "do not run pip install" since the Supervisor handles it. Prevents double-install and wasted tool calls.
+
 ## [2.5.3] - 2026-03-27
 
 ### Fixed

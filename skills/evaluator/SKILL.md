@@ -33,25 +33,24 @@ Read every file the Builder created or modified. Don't skim. Read.
 
 ### Step 3: Run Tests
 
-Before running the test suite, check for and install dependencies:
+The project environment has been set up before you run. A virtual environment
+exists at `.venv/` with dependencies already installed.
 
-1. Check if `requirements.txt`, `pyproject.toml`, or `setup.py` exists
-2. If found, run `pip install -e .` or `pip install -r requirements.txt` ONCE
-3. Do not retry installation if it fails — note the failure and move on
-4. Then run the test suite once with `python -m pytest` (not bare `pytest`)
-5. If tests fail due to import errors after installation, record as a
-   dependency configuration issue, not a code quality issue
+Run the test suite using the venv's Python:
+- Linux/macOS: `.venv/bin/python -m pytest tests/ -v`
+- Windows: `.venv/Scripts/python -m pytest tests/ -v`
 
-**CRITICAL: Attempt dependency installation exactly once. If it fails,
-do not loop trying different install commands. Record the error and
-evaluate what you can from reading the code.**
+Or simply: `python -m pytest tests/ -v` (the venv is on PATH)
 
-Record:
-- Total tests
-- Passing
-- Failing
-- Warnings (especially test collection warnings)
-- Coverage gaps you can identify by reading the test file
+Record: total tests, passing, failing, warnings.
+
+**Do not attempt to install packages.** Dependencies are pre-installed.
+If tests fail with ModuleNotFoundError, record it as a dependency
+configuration issue in the evaluation report — do not try to fix it
+with pip. The project's pyproject.toml or requirements.txt needs fixing.
+
+Run tests exactly once. Do not retry with different pytest flags or
+alternative commands if the first run fails.
 
 ### Step 4: Verify Acceptance Criteria
 
@@ -159,7 +158,7 @@ summary: |
 5. **Grade against the contract.** The sprint contract is your rubric. Don't invent new requirements. But DO report problems you find even if they're not in the contract — as additional findings, not acceptance criteria failures.
 6. **Default to skepticism.** If you can't verify a criterion, it's FAIL, not "probably fine."
 7. **Be fair.** Skeptical doesn't mean hostile. If the work is good, say so. Give credit where it's earned. But never inflate.
-8. **Install deps exactly once.** Run `pip install -e .` or `pip install -r requirements.txt` once at the start of Step 3. If it fails, record the error and move on. Never retry with different install commands. Never search the filesystem for binaries.
+8. **Never install packages.** Do not run `pip install`, `npm install`, or any package manager. Dependencies are pre-installed by the pipeline. If tests fail with import errors, record it as a dependency issue — do not try to fix it.
 9. **Stop when done.** Once you have written the evaluation YAML and stated your verdict, STOP. Do not re-read files, re-run commands, or "double-check." Your verdict is final.
 10. **Respect the tool call budget.** At standard quality, you have 10-15 calls. Each read_file, list_dir, or run_bash counts. Plan your reads before you start — don't explore aimlessly.
 

@@ -197,6 +197,75 @@ class Supervisor:
         self.auto_approve = auto_approve
         self.state = _load_state(project_dir)
 
+    def _setup_project_env(self) -> None:
+        """Create venv and install project dependencies before agent stages run.
+
+        Runs once per pipeline invocation. Agents should not need to install
+        dependencies — that wastes tool calls. This method does it for them.
+        Does not raise — failures are logged but do not stop the pipeline,
+        since the project may not have installable dependencies yet.
+        """
+        import subprocess
+        import sys
+
+        venv_dir = self.project_dir / ".venv"
+
+        # Create venv if it doesn't exist
+        if not venv_dir.exists():
+            console.print("[dim]Creating virtual environment...[/dim]")
+            try:
+                subprocess.run(
+                    [sys.executable, "-m", "venv", str(venv_dir)],
+                    cwd=str(self.project_dir),
+                    capture_output=True,
+                    timeout=60,
+                )
+            except Exception as e:
+                console.print(f"[dim]venv creation failed (non-fatal): {e}[/dim]")
+                return
+
+        # Determine pip executable
+        if os.name == "nt":
+            pip = venv_dir / "Scripts" / "pip"
+        else:
+            pip = venv_dir / "bin" / "pip"
+
+        if not pip.exists():
+            return
+
+        # Install from pyproject.toml if present
+        if (self.project_dir / "pyproject.toml").exists():
+            console.print("[dim]Installing project dependencies (pip install -e .)...[/dim]")
+            try:
+                result = subprocess.run(
+                    [str(pip), "install", "-e", ".", "--quiet"],
+                    cwd=str(self.project_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+                if result.returncode == 0:
+                    console.print("[dim]Dependencies installed.[/dim]")
+                else:
+                    console.print(f"[dim]pip install failed (non-fatal): {result.stderr[:200]}[/dim]")
+            except Exception as e:
+                console.print(f"[dim]pip install failed (non-fatal): {e}[/dim]")
+            return
+
+        # Fall back to requirements.txt
+        req_file = self.project_dir / "requirements.txt"
+        if req_file.exists():
+            console.print("[dim]Installing requirements.txt...[/dim]")
+            try:
+                subprocess.run(
+                    [str(pip), "install", "-r", "requirements.txt", "--quiet"],
+                    cwd=str(self.project_dir),
+                    capture_output=True,
+                    timeout=120,
+                )
+            except Exception as e:
+                console.print(f"[dim]pip install -r failed (non-fatal): {e}[/dim]")
+
     async def run(
         self,
         concept: str = "",
@@ -278,6 +347,9 @@ class Supervisor:
             console.print("  [dim]Use quality=standard (default) to minimize cost.[/dim]")
 
             return SupervisorResult(concept=concept, stages=[], status="complete")
+
+        # Set up project environment once for the whole pipeline
+        self._setup_project_env()
 
         # Single step mode
         if step:
@@ -581,9 +653,16 @@ class Supervisor:
         effective_timeout = timeout_seconds or self.config.pipeline.builder_timeout_seconds
         effective_max_calls = max_tool_calls or self.config.pipeline.builder_max_tool_calls
 
-        # Doc writer does more reading/orientation — give it a wider loop
-        # detection window to avoid false positives.
-        window = 8 if stage == PipelineStage.DOCUMENT else 5
+        # Per-stage loop detection windows:
+        # - Doc writer reads many files, needs wider window to avoid false positives
+        # - Evaluator is structured — 3 identical calls genuinely means stuck
+        # - Default of 5 for builder and other stages
+        if stage == PipelineStage.DOCUMENT:
+            window = 8
+        elif stage in (PipelineStage.EVALUATE, PipelineStage.EVALUATE_DESIGN):
+            window = 3
+        else:
+            window = 5
 
         result = await run_tool_loop(
             provider=self.provider,
@@ -634,6 +713,9 @@ class Supervisor:
         """Run build-evaluate loop for a sprint."""
         max_loops = self.config.pipeline.max_loops
         console.print(f"\n[bold yellow]Build-Evaluate: {sprint_name}[/bold yellow]")
+
+        # Set up project environment before agents run
+        self._setup_project_env()
 
         total_input_tokens = 0
         total_output_tokens = 0
@@ -739,22 +821,9 @@ class Supervisor:
                     stage=PipelineStage.EVALUATE, status="failed", error=str(e)
                 )
 
-            # Check for dependency files so evaluator knows to install before testing
-            dep_hint = ""
-            for dep_file in ["requirements.txt", "pyproject.toml", "setup.py"]:
-                dep_path = self.project_dir / dep_file
-                if dep_path.exists():
-                    dep_hint = (
-                        f"\nDependency file present: {dep_file}\n"
-                        f"Run `pip install -e .` or `pip install -r requirements.txt` "
-                        f"once before testing.\n"
-                    )
-                    break
-
             eval_prompt = (
                 f"Quality level: {self.config.pipeline.quality}\n\n"
-                f"Evaluate sprint {sprint_name} (loop {loop_num}/{max_loops}).\n"
-                f"{dep_hint}\n"
+                f"Evaluate sprint {sprint_name} (loop {loop_num}/{max_loops}).\n\n"
                 f"Sprint contract:\n{sprint_contract}\n\n"
                 f"Builder output:\n{build_result.final_text}"
             )

@@ -48,14 +48,17 @@ For each deliverable in order:
 
 ### Step 4: Run Tests
 
-Before running tests, install project dependencies:
-- If `pyproject.toml` exists: `pip install -e .`
-- If `requirements.txt` exists: `pip install -r requirements.txt`
-- Run installation exactly once. If it fails, document it in your build summary.
-
-Then run: `python -m pytest tests/ -v`
+The project environment is pre-configured. Run tests with:
+```bash
+python -m pytest tests/ -v
+```
 
 Fix any failures. Do not move to the next step with failing tests.
+
+**Do not run `pip install` or create a venv** — the environment is
+already set up. If you need a new dependency, add it to `pyproject.toml`
+under `[project] dependencies` and note it in your build summary.
+The environment will be rebuilt on the next pipeline run.
 
 ### Step 5: Self-Checklist (Not Self-Evaluation)
 

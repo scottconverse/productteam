@@ -447,3 +447,66 @@ def test_openai_model_id(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     p = get_provider(provider="openai", model="gpt-4-turbo")
     assert p.model_id() == "gpt-4-turbo"
+
+
+# ---------------------------------------------------------------------------
+# Anthropic cache_control tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_anthropic_complete_sends_cache_control():
+    """complete() sends system as a list block with cache_control."""
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="response", type="text")]
+    mock_response.usage.input_tokens = 100
+    mock_response.usage.output_tokens = 10
+    mock_response.usage.cache_creation_input_tokens = 90
+    mock_response.usage.cache_read_input_tokens = 0
+
+    with patch("productteam.providers.anthropic.anthropic") as mock_sdk:
+        mock_client = MagicMock()
+        mock_sdk.AsyncAnthropic.return_value = mock_client
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+        from productteam.providers.anthropic import AnthropicProvider
+        provider = AnthropicProvider(model="claude-haiku-4-5-20251001", api_key="test-key")
+        await provider.complete("You are a builder.", [{"role": "user", "content": "hi"}])
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        system_arg = call_kwargs["system"]
+
+        assert isinstance(system_arg, list), "system must be a list for cache_control"
+        assert system_arg[0]["type"] == "text"
+        assert system_arg[0]["cache_control"] == {"type": "ephemeral"}
+
+
+@pytest.mark.asyncio
+async def test_anthropic_complete_with_tools_sends_cache_control():
+    """complete_with_tools() sends system as a list block with cache_control."""
+    mock_response = MagicMock()
+    mock_response.content = []
+    mock_response.stop_reason = "end_turn"
+    mock_response.usage.input_tokens = 100
+    mock_response.usage.output_tokens = 10
+    mock_response.usage.cache_creation_input_tokens = 90
+    mock_response.usage.cache_read_input_tokens = 0
+
+    with patch("productteam.providers.anthropic.anthropic") as mock_sdk:
+        mock_client = MagicMock()
+        mock_sdk.AsyncAnthropic.return_value = mock_client
+        mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+        from productteam.providers.anthropic import AnthropicProvider
+        provider = AnthropicProvider(model="claude-haiku-4-5-20251001", api_key="test-key")
+        await provider.complete_with_tools(
+            "You are an evaluator.",
+            [{"role": "user", "content": "evaluate"}],
+            tools=[],
+        )
+
+        call_kwargs = mock_client.messages.create.call_args.kwargs
+        system_arg = call_kwargs["system"]
+
+        assert isinstance(system_arg, list)
+        assert system_arg[0]["cache_control"] == {"type": "ephemeral"}

@@ -32,7 +32,13 @@ class AnthropicProvider(LLMProvider):
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=max_tokens,
-            system=system,
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=messages,
         )
         parts = [block.text for block in response.content if hasattr(block, "text")]
@@ -54,7 +60,13 @@ class AnthropicProvider(LLMProvider):
         response = await self._client.messages.create(
             model=self._model,
             max_tokens=max_tokens,
-            system=system,
+            system=[
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=messages,
             tools=tools,
         )
