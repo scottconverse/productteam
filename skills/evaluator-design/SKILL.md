@@ -103,7 +103,7 @@ Each criterion is graded 1-5:
 
 ## Evaluation Report Format
 
-Write to `.claude/evaluations/eval-NNN-design.yaml`:
+Write to `.productteam/evaluations/eval-NNN-design.yaml`:
 
 ```yaml
 sprint: <N>

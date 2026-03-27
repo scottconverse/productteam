@@ -427,3 +427,58 @@ def test_recover_resets_state_with_yes(tmp_path):
     )
     assert state["stages"]["plan"]["status"] == "pending"
     assert state["stages"]["prd"]["status"] == "complete"
+
+
+def test_recover_with_stage_resets_only_that_stage(tmp_path):
+    """recover --stage resets only the named stage, leaves others untouched."""
+    import json as json_mod
+
+    runner.invoke(app, ["init", str(tmp_path)])
+    _write_state(tmp_path, {
+        "schema_version": 1,
+        "concept": "test app",
+        "stages": {
+            "prd": {"status": "complete"},
+            "plan": {"status": "stuck"},
+            "build": {"status": "running"},
+        },
+    })
+
+    result = runner.invoke(app, ["recover", "--stage", "plan", "--dir", str(tmp_path)])
+    assert result.exit_code == 0
+
+    state = json_mod.loads((tmp_path / ".productteam" / "state.json").read_text())
+    assert state["stages"]["plan"]["status"] == "pending"
+    assert state["stages"]["build"]["status"] == "running"  # untouched
+    assert state["stages"]["prd"]["status"] == "complete"   # untouched
+
+
+def test_recover_with_stage_invalid_name(tmp_path):
+    """recover --stage with invalid stage name exits with error."""
+    runner.invoke(app, ["init", str(tmp_path)])
+    _write_state(tmp_path, {
+        "schema_version": 1,
+        "concept": "test app",
+        "stages": {"prd": {"status": "stuck"}},
+    })
+
+    result = runner.invoke(app, ["recover", "--stage", "nonexistent", "--dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "Unknown stage" in result.output
+
+
+def test_recover_with_stage_not_stuck(tmp_path):
+    """recover --stage with a non-stuck stage reports nothing to reset."""
+    runner.invoke(app, ["init", str(tmp_path)])
+    _write_state(tmp_path, {
+        "schema_version": 1,
+        "concept": "test app",
+        "stages": {
+            "prd": {"status": "complete"},
+            "plan": {"status": "stuck"},
+        },
+    })
+
+    result = runner.invoke(app, ["recover", "--stage", "prd", "--dir", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "not stuck" in result.output

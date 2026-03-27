@@ -391,6 +391,11 @@ _STAGE_ORDER = ["prd", "plan", "build", "evaluate", "document", "evaluate-design
 @app.command("recover")
 def recover_cmd(
     yes: bool = typer.Option(False, "--yes", "-y", help="Resume immediately without confirmation"),
+    stage: Optional[str] = typer.Option(
+        None, "--stage", "-s",
+        help="Reset only this specific stage (prd|plan|build|evaluate|document|evaluate-design). "
+             "Default: reset all stuck stages."
+    ),
     directory: Optional[Path] = typer.Option(
         None, "--dir", "-d", help="Project directory (default: current directory)"
     ),
@@ -401,6 +406,10 @@ def recover_cmd(
     and re-runs from the stuck stage. The stuck stage is always re-executed
     because a timeout or crash typically means incomplete output (e.g. the
     Planner wrote some sprint files but not all).
+
+    With --stage, resets only the specified stage to pending without touching
+    other stages or re-entering the pipeline. Use 'productteam run' afterward
+    to resume.
 
     If the stuck stage already produced valid artifacts and you don't want them
     overwritten, use 'productteam run' instead — it skips stages marked complete.
@@ -428,7 +437,43 @@ def recover_cmd(
         error_console.print("[red]Error:[/red] No concept in state.json. Nothing to recover.")
         raise typer.Exit(code=1)
 
-    # Find stuck/running stages and the last completed stage
+    # --stage mode: reset a single stage and exit (no pipeline re-entry)
+    _VALID_STAGES = {"prd", "plan", "build", "evaluate", "document", "evaluate-design", "ship"}
+    if stage:
+        if stage not in _VALID_STAGES:
+            error_console.print(
+                f"[red]Error:[/red] Unknown stage '{stage}'. "
+                f"Valid stages: {', '.join(sorted(_VALID_STAGES))}"
+            )
+            raise typer.Exit(code=1)
+
+        # Find matching stage keys (handles both "build" and "build:sprint-001")
+        matching = [
+            (name, info.get("status", ""))
+            for name, info in stages.items()
+            if name == stage or name.startswith(f"{stage}:")
+        ]
+
+        if not matching:
+            console.print(f"[yellow]Stage '{stage}' not found in state.json.[/yellow]")
+            raise typer.Exit(code=0)
+
+        stuck_matching = [(n, s) for n, s in matching if s not in ("complete", "passed", "pending")]
+        if not stuck_matching:
+            console.print(f"[green]Stage '{stage}' is not stuck.[/green] Nothing to reset.")
+            console.print(f"  Current status: {', '.join(f'{n}={s}' for n, s in matching)}")
+            raise typer.Exit(code=0)
+
+        for name, status in stuck_matching:
+            stages[name]["status"] = "pending"
+            console.print(f"  Reset [red]{name}[/red] ({status}) → [green]pending[/green]")
+
+        state["stages"] = stages
+        state_path.write_text(json_mod.dumps(state, indent=2), encoding="utf-8")
+        console.print(f"\n[green]Done.[/green] Run [bold]'productteam run'[/bold] to resume.")
+        raise typer.Exit(code=0)
+
+    # Default mode: find and reset all stuck stages, then re-enter pipeline
     stuck_stages = []
     completed_stages = []
     for name, info in stages.items():
