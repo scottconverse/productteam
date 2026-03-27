@@ -2,7 +2,8 @@
 
 Serves a single-page dashboard at http://<host>:<port> using
 stdlib http.server. No dependencies, no framework, no build step.
-Accessible from any device on your local network when bound to 0.0.0.0.
+Accessible from any device on your local network when bound to 0.0.0.0
+(opt-in via --lan flag).
 """
 
 from __future__ import annotations
@@ -246,7 +247,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 def serve_dashboard(
     queue: FileQueue,
     port: int = 7654,
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
 ) -> HTTPServer:
     """Start the dashboard server in a background thread.
 

@@ -15,7 +15,7 @@ from productteam.config import (
     save_config,
     set_config_value,
 )
-from productteam.models import GatesConfig, PipelineConfig, ProductTeamConfig, ProjectConfig
+from productteam.models import ForgeConfig, GatesConfig, PipelineConfig, ProductTeamConfig, ProjectConfig
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,18 @@ def test_default_config_pipeline_model():
     """Default model is claude-sonnet-4-6."""
     cfg = default_config()
     assert cfg.pipeline.model == "claude-sonnet-4-6"
+
+
+def test_default_forge_host_is_localhost():
+    """v2.4.0: Default dashboard bind is 127.0.0.1, not 0.0.0.0."""
+    cfg = default_config()
+    assert cfg.forge.status_host == "127.0.0.1"
+
+
+def test_forge_config_default_host_localhost():
+    """ForgeConfig model default is 127.0.0.1."""
+    forge = ForgeConfig()
+    assert forge.status_host == "127.0.0.1"
 
 
 def test_default_config_max_loops():

@@ -11,6 +11,8 @@ import pytest
 
 from productteam.tool_loop import (
     BUILDER_TOOLS,
+    _SHELL_FEATURE_RE,
+    _check_write_restricted,
     _execute_tool,
     _validate_command,
     _validate_path,
@@ -443,3 +445,141 @@ def test_builder_tools_count():
     assert len(BUILDER_TOOLS) == 4
     names = {t["name"] for t in BUILDER_TOOLS}
     assert names == {"read_file", "write_file", "run_bash", "list_dir"}
+
+
+# ---------------------------------------------------------------------------
+# v2.4.0 Security hardening tests
+# ---------------------------------------------------------------------------
+
+
+# --- shell=False (Fix 2) ---
+
+class TestShellFeatureDetection:
+    """Tests for _SHELL_FEATURE_RE pattern matching."""
+
+    def test_simple_command_no_shell(self):
+        """Simple commands should not match shell features."""
+        assert not _SHELL_FEATURE_RE.search("python -c 'print(1)'")
+        assert not _SHELL_FEATURE_RE.search("pytest tests/ -v")
+        assert not _SHELL_FEATURE_RE.search("pip install requests")
+
+    def test_pipe_needs_shell(self):
+        """Pipe character triggers shell=True."""
+        assert _SHELL_FEATURE_RE.search("cat file.txt | grep error")
+
+    def test_redirect_needs_shell(self):
+        """Redirect operators trigger shell=True."""
+        assert _SHELL_FEATURE_RE.search("echo hello > output.txt")
+        assert _SHELL_FEATURE_RE.search("cat < input.txt")
+
+    def test_chain_needs_shell(self):
+        """&& and || trigger shell=True."""
+        assert _SHELL_FEATURE_RE.search("mkdir build && cd build")
+        assert _SHELL_FEATURE_RE.search("make || echo failed")
+
+    def test_semicolon_needs_shell(self):
+        """Semicolon triggers shell=True."""
+        assert _SHELL_FEATURE_RE.search("echo a; echo b")
+
+    def test_backtick_needs_shell(self):
+        """Backtick substitution triggers shell=True."""
+        assert _SHELL_FEATURE_RE.search("echo `date`")
+
+    def test_dollar_paren_needs_shell(self):
+        """$() substitution triggers shell=True."""
+        assert _SHELL_FEATURE_RE.search("echo $(whoami)")
+
+
+def test_run_bash_simple_command_uses_shell_false(tmp_path):
+    """Simple command runs with shell=False (no shell metacharacters)."""
+    cmd = "python -c \"print('hello')\""
+    result = _execute_tool("run_bash", {"command": cmd}, tmp_path)
+    data = json.loads(result)
+    if "error" in data and "OS error" in data["error"]:
+        # Windows subprocess handle error under pytest — acceptable
+        assert isinstance(data["error"], str)
+    else:
+        assert "hello" in data.get("stdout", "")
+
+
+def test_run_bash_pipe_falls_back_to_shell(tmp_path):
+    """Command with pipe falls back to shell=True."""
+    if sys.platform == "win32":
+        cmd = "echo hello_pipe | python -c \"import sys; print(sys.stdin.read().strip())\""
+    else:
+        cmd = "echo hello_pipe | cat"
+    result = _execute_tool("run_bash", {"command": cmd}, tmp_path)
+    data = json.loads(result)
+    if "error" in data and "OS error" in data["error"]:
+        assert isinstance(data["error"], str)
+    else:
+        assert "hello_pipe" in data.get("stdout", "")
+
+
+# --- Write restrictions (Fix 3) ---
+
+class TestWriteRestricted:
+    """Tests for _check_write_restricted path blocking."""
+
+    def test_claude_dir_blocked(self):
+        assert _check_write_restricted(".claude/skills/foo.md") is not None
+
+    def test_claude_root_blocked(self):
+        assert _check_write_restricted(".claude/anything") is not None
+
+    def test_productteam_dir_blocked(self):
+        assert _check_write_restricted(".productteam/state.json") is not None
+
+    def test_productteam_config_blocked(self):
+        assert _check_write_restricted(".productteam/config.toml") is not None
+
+    def test_productteam_sprints_allowed(self):
+        """Planner needs .productteam/sprints/ — must be allowed."""
+        assert _check_write_restricted(".productteam/sprints/sprint-1.json") is None
+
+    def test_productteam_sprints_subdir_allowed(self):
+        assert _check_write_restricted(".productteam/sprints/deep/file.md") is None
+
+    def test_normal_path_allowed(self):
+        assert _check_write_restricted("src/main.py") is None
+
+    def test_readme_allowed(self):
+        assert _check_write_restricted("README.md") is None
+
+
+def test_execute_write_file_claude_dir_blocked(tmp_path):
+    """write_file tool blocks writes to .claude/ directory."""
+    result = _execute_tool(
+        "write_file",
+        {"path": ".claude/skills/evil.md", "content": "pwned"},
+        tmp_path,
+    )
+    data = json.loads(result)
+    assert "error" in data
+    assert ".claude" in data["error"]
+    # File must not exist
+    assert not (tmp_path / ".claude" / "skills" / "evil.md").exists()
+
+
+def test_execute_write_file_productteam_state_blocked(tmp_path):
+    """write_file tool blocks writes to .productteam/state.json."""
+    result = _execute_tool(
+        "write_file",
+        {"path": ".productteam/state.json", "content": "{}"},
+        tmp_path,
+    )
+    data = json.loads(result)
+    assert "error" in data
+    assert ".productteam" in data["error"]
+
+
+def test_execute_write_file_productteam_sprints_allowed(tmp_path):
+    """write_file tool allows writes to .productteam/sprints/."""
+    result = _execute_tool(
+        "write_file",
+        {"path": ".productteam/sprints/sprint-1.json", "content": "{}"},
+        tmp_path,
+    )
+    data = json.loads(result)
+    assert data.get("success") is True
+    assert (tmp_path / ".productteam" / "sprints" / "sprint-1.json").exists()

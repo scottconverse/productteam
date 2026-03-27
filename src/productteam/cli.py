@@ -762,13 +762,14 @@ def forge_submit(
     concept: Optional[str] = typer.Argument(None, help="Product concept to forge"),
     listen: bool = typer.Option(False, "--listen", help="Start the forge daemon"),
     dashboard: bool = typer.Option(False, "--dashboard", help="Enable status dashboard (with --listen)"),
+    lan: bool = typer.Option(False, "--lan", help="Bind dashboard to 0.0.0.0 (accessible from LAN)"),
 ) -> None:
     """Submit an idea to forge, or start the daemon."""
     if ctx.invoked_subcommand is not None:
         return
 
     if listen:
-        _forge_listen(dashboard)
+        _forge_listen(dashboard, lan=lan)
         return
 
     if not concept:
@@ -784,7 +785,7 @@ def forge_submit(
     console.print(f"\nRun [bold]productteam forge --listen[/bold] to process it.")
 
 
-def _forge_listen(with_dashboard: bool) -> None:
+def _forge_listen(with_dashboard: bool, *, lan: bool = False) -> None:
     """Start the forge daemon."""
     import asyncio
 
@@ -806,8 +807,13 @@ def _forge_listen(with_dashboard: bool) -> None:
 
     if with_dashboard:
         from productteam.forge.dashboard import serve_dashboard
-        host = config.forge.status_host
+        host = "0.0.0.0" if lan else config.forge.status_host
         port = config.forge.status_port
+        if lan:
+            error_console.print(
+                "[yellow]Warning:[/yellow] Dashboard bound to 0.0.0.0 — "
+                "accessible to anyone on your network. No authentication."
+            )
         serve_dashboard(queue, port=port, host=host)
         if host == "0.0.0.0":
             import socket

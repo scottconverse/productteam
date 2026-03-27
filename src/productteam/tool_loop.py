@@ -9,10 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
+import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from productteam.providers.base import LLMProvider
 
@@ -78,6 +83,10 @@ BUILDER_TOOLS = [
 ]
 
 
+# Shell metacharacter pattern — commands matching this need shell=True
+_SHELL_FEATURE_RE = re.compile(r"[|><;]|&&|\|\||`|\$\(")
+
+
 # Paths that must never be read or written
 FORBIDDEN_PATHS = [
     ".ssh", ".aws", ".gnupg", ".config/gcloud",
@@ -102,6 +111,26 @@ def _validate_path(path_str: str, project_dir: Path) -> Path | str:
         return f"Path escapes project directory: {path_str}"
 
     return resolved
+
+
+def _check_write_restricted(path_str: str) -> str | None:
+    """Block writes to .claude/ and .productteam/ directories.
+
+    Exception: .productteam/sprints/ is writable (Planner needs it).
+    Returns an error string if blocked, None if OK.
+    """
+    parts = Path(path_str).parts
+    if not parts:
+        return None
+    top = parts[0]
+    if top == ".claude":
+        return f"Writes to .claude/ are blocked: {path_str}"
+    if top == ".productteam":
+        # Allow .productteam/sprints/ and anything below it
+        if len(parts) >= 2 and parts[1] == "sprints":
+            return None
+        return f"Writes to .productteam/ are blocked (except sprints/): {path_str}"
+    return None
 
 
 # Patterns that indicate environment variable dumping
@@ -202,6 +231,10 @@ def _execute_tool(
         validated = _validate_path(path_str, project_dir)
         if isinstance(validated, str):
             return json.dumps({"error": validated})
+        # Block writes to .claude/ and .productteam/ (except sprints/)
+        write_err = _check_write_restricted(path_str)
+        if write_err:
+            return json.dumps({"error": write_err})
         try:
             validated.parent.mkdir(parents=True, exist_ok=True)
             validated.write_text(content, encoding="utf-8")
@@ -217,10 +250,6 @@ def _execute_tool(
             return json.dumps({"error": cmd_error})
         try:
             # Ensure Python is on PATH for the subprocess.
-            # On Windows (MSYS2/Git Bash), the system Python often isn't on
-            # the bash shell's PATH. On Linux/macOS this is typically a no-op
-            # since /usr/bin is already in PATH. Cross-platform safe: uses
-            # os.pathsep and conditional venv dir name.
             env = os.environ.copy()
             python_dir = str(Path(sys.executable).parent)
             env["PATH"] = python_dir + os.pathsep + env.get("PATH", "")
@@ -228,9 +257,18 @@ def _execute_tool(
             if venv_scripts.exists():
                 env["PATH"] = str(venv_scripts) + os.pathsep + env["PATH"]
 
+            # Default to shell=False for security. Fall back to shell=True
+            # only when the command uses shell features that require it.
+            use_shell = bool(_SHELL_FEATURE_RE.search(command))
+            if use_shell:
+                logger.warning("run_bash: shell=True fallback for: %s", command)
+                cmd_arg: str | list[str] = command
+            else:
+                cmd_arg = shlex.split(command)
+
             result = subprocess.run(
-                command,
-                shell=True,
+                cmd_arg,
+                shell=use_shell,
                 cwd=str(project_dir),
                 capture_output=True,
                 text=True,

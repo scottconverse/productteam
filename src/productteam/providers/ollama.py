@@ -47,6 +47,64 @@ class OllamaProvider(LLMProvider):
             data = resp.json()
         return data["message"]["content"]
 
+    @staticmethod
+    def _convert_messages(messages: list[dict]) -> list[dict]:
+        """Convert Anthropic-format messages to Ollama-format.
+
+        Anthropic uses:
+          assistant: {"content": [{"type": "tool_use", "id": ..., "name": ..., "input": ...}]}
+          user:      {"content": [{"type": "tool_result", "tool_use_id": ..., "content": ...}]}
+
+        Ollama expects:
+          assistant: {"content": "", "tool_calls": [{"function": {"name": ..., "arguments": ...}}]}
+          tool:      {"role": "tool", "content": "..."}
+        """
+        converted = []
+        for msg in messages:
+            content = msg.get("content")
+            role = msg.get("role", "")
+
+            # Plain string content — pass through
+            if isinstance(content, str):
+                converted.append(msg)
+                continue
+
+            # List content — check for tool_use / tool_result blocks
+            if isinstance(content, list):
+                # Assistant message with tool_use blocks
+                if role == "assistant":
+                    text_parts = []
+                    tool_calls = []
+                    for block in content:
+                        if block.get("type") == "tool_use":
+                            tool_calls.append({
+                                "function": {
+                                    "name": block["name"],
+                                    "arguments": block.get("input", {}),
+                                },
+                            })
+                        elif block.get("type") == "text":
+                            text_parts.append(block.get("text", ""))
+                    out = {"role": "assistant", "content": "\n".join(text_parts)}
+                    if tool_calls:
+                        out["tool_calls"] = tool_calls
+                    converted.append(out)
+                    continue
+
+                # User message with tool_result blocks
+                if role == "user":
+                    for block in content:
+                        if block.get("type") == "tool_result":
+                            converted.append({
+                                "role": "tool",
+                                "content": block.get("content", ""),
+                            })
+                    continue
+
+            # Fallback — pass through
+            converted.append(msg)
+        return converted
+
     async def complete_with_tools(
         self,
         system: str,
@@ -54,7 +112,8 @@ class OllamaProvider(LLMProvider):
         tools: list[dict],
         max_tokens: int = 8192,
     ) -> dict:
-        msgs = [{"role": "system", "content": system}] + messages
+        converted = self._convert_messages(messages)
+        msgs = [{"role": "system", "content": system}] + converted
         # Ollama supports tool calling for compatible models
         ollama_tools = []
         for tool in tools:

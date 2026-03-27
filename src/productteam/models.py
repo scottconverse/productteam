@@ -36,7 +36,7 @@ class ForgeConfig(BaseModel):
     queue_backend: str = "file"
     notification_backend: str = "none"
     notification_url: str = ""
-    status_host: str = "0.0.0.0"
+    status_host: str = "127.0.0.1"
     status_port: int = 7654
     github_repo: str = ""
     poll_interval_seconds: int = 10
