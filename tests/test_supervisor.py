@@ -1276,3 +1276,124 @@ def test_supervisor_result_token_summary():
     assert summary["total_output_tokens"] == 1500
     assert summary["est_cost_usd"] is not None
     assert summary["est_cost_usd"] > 0
+
+
+# ---------------------------------------------------------------------------
+# v2.5.2 Cost fix tests
+# ---------------------------------------------------------------------------
+
+
+def _eval_response_with_usage(text: str, input_tok: int = 1000, output_tok: int = 100) -> dict:
+    """Build a text-only response with usage data for token accumulation tests."""
+    return {
+        "role": "assistant",
+        "content": [{"type": "text", "text": text}],
+        "stop_reason": "end_turn",
+        "usage": {
+            "input_tokens": input_tok,
+            "output_tokens": output_tok,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_build_evaluate_loop_accumulates_tokens(tmp_path):
+    """Build stage StageResult includes token counts from builder and evaluator."""
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
+        "sprint: 1\ntitle: Test\n"
+    )
+    config = _make_config()
+    mock_provider = AsyncMock()
+
+    # Builder returns 5000 input / 500 output, evaluator returns 3000 / 200
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response_with_usage("Built.", 5000, 500),
+        _eval_response_with_usage("evaluator_verdict: PASS", 3000, 200),
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor._build_evaluate_loop("sprint-001")
+
+    assert result.status == "complete"
+    assert result.input_tokens == 8000   # 5000 + 3000
+    assert result.output_tokens == 700   # 500 + 200
+
+
+@pytest.mark.asyncio
+async def test_build_evaluate_loop_tokens_on_fail(tmp_path):
+    """Build stage StageResult includes tokens even when evaluator returns FAIL."""
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
+        "sprint: 1\ntitle: Test\n"
+    )
+    config = _make_config()
+    mock_provider = AsyncMock()
+
+    mock_provider.complete_with_tools = AsyncMock(side_effect=[
+        _eval_response_with_usage("Built.", 4000, 400),
+        _eval_response_with_usage("evaluator_verdict: FAIL\nBroken.", 2000, 100),
+    ])
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor._build_evaluate_loop("sprint-001")
+
+    assert result.status == "failed"
+    assert result.input_tokens == 6000
+    assert result.output_tokens == 500
+
+
+@pytest.mark.asyncio
+async def test_design_eval_prompt_includes_quality_level(tmp_path):
+    """Design evaluator prompt includes quality level from config."""
+    _init_project(tmp_path)
+
+    config = _make_config(pipeline={
+        "provider": "anthropic", "model": "test", "max_loops": 1,
+        "stage_timeout_seconds": 10, "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5, "auto_approve": False,
+        "quality": "standard",
+    })
+    mock_provider = AsyncMock()
+    captured_messages = []
+
+    async def capture_cwt(system, messages, tools, **kwargs):
+        captured_messages.append(messages[0]["content"] if messages else "")
+        return {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "evaluator_verdict: PASS"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 100, "output_tokens": 10,
+                      "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+        }
+
+    mock_provider.complete_with_tools = capture_cwt
+
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor._run_tool_loop_stage(
+        PipelineStage.EVALUATE_DESIGN, "evaluator-design",
+        f"Quality level: {config.pipeline.quality}\n\nEvaluate design quality. Concept: test",
+    )
+
+    assert result.status == "complete"
+    assert "standard" in captured_messages[0]
+
+
+def test_token_summary_includes_cache_fields():
+    """token_summary() includes cache_creation and cache_read fields."""
+    stages = [
+        StageResult(PipelineStage.PRD, "complete",
+                    input_tokens=10000, output_tokens=500,
+                    cache_creation_input_tokens=8000, cache_read_input_tokens=2000),
+        StageResult(PipelineStage.PLAN, "complete",
+                    input_tokens=20000, output_tokens=1000,
+                    cache_creation_input_tokens=0, cache_read_input_tokens=15000),
+    ]
+    result = SupervisorResult(concept="test", stages=stages, status="complete")
+    summary = result.token_summary()
+    assert summary["cache_creation_input_tokens"] == 8000
+    assert summary["cache_read_input_tokens"] == 17000
+    assert len(summary["by_stage"]) == 2
+    assert summary["by_stage"][0]["cache_read_input_tokens"] == 2000

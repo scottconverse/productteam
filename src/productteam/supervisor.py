@@ -49,6 +49,8 @@ class StageResult:
         error: str = "",
         input_tokens: int = 0,
         output_tokens: int = 0,
+        cache_creation_input_tokens: int = 0,
+        cache_read_input_tokens: int = 0,
     ):
         self.stage = stage
         self.status = status  # "complete" | "stuck" | "failed" | "skipped"
@@ -57,6 +59,8 @@ class StageResult:
         self.error = error
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
+        self.cache_creation_input_tokens = cache_creation_input_tokens
+        self.cache_read_input_tokens = cache_read_input_tokens
 
 
 # Pricing per million tokens (update as providers change pricing)
@@ -86,6 +90,8 @@ class SupervisorResult:
         """Return token usage and estimated cost across all stages."""
         total_input = sum(s.input_tokens for s in self.stages)
         total_output = sum(s.output_tokens for s in self.stages)
+        total_cache_creation = sum(s.cache_creation_input_tokens for s in self.stages)
+        total_cache_read = sum(s.cache_read_input_tokens for s in self.stages)
 
         pricing = _PROVIDER_PRICING.get(model_id, {})
         est_cost = None
@@ -98,12 +104,16 @@ class SupervisorResult:
         return {
             "total_input_tokens": total_input,
             "total_output_tokens": total_output,
+            "cache_creation_input_tokens": total_cache_creation,
+            "cache_read_input_tokens": total_cache_read,
             "est_cost_usd": round(est_cost, 4) if est_cost is not None else None,
             "by_stage": [
                 {
                     "stage": s.stage.value,
                     "input_tokens": s.input_tokens,
                     "output_tokens": s.output_tokens,
+                    "cache_creation_input_tokens": s.cache_creation_input_tokens,
+                    "cache_read_input_tokens": s.cache_read_input_tokens,
                 }
                 for s in self.stages
             ],
@@ -373,6 +383,7 @@ class Supervisor:
             if not _is_stage_complete(self.state, "evaluate-design") or rebuild:
                 result = await self._run_tool_loop_stage(
                     PipelineStage.EVALUATE_DESIGN, "evaluator-design",
+                    f"Quality level: {self.config.pipeline.quality}\n\n"
                     f"Evaluate design quality. Read docs/index.html, docs/terms.html, "
                     f"and README.md. Concept: {concept}",
                 )
@@ -456,6 +467,7 @@ class Supervisor:
         elif stage == PipelineStage.EVALUATE_DESIGN:
             return await self._run_tool_loop_stage(
                 stage, "evaluator-design",
+                f"Quality level: {self.config.pipeline.quality}\n\n"
                 f"Evaluate design quality. Read docs/index.html, docs/terms.html, "
                 f"and README.md. Concept: {concept}",
             )
@@ -568,6 +580,10 @@ class Supervisor:
         effective_timeout = timeout_seconds or self.config.pipeline.builder_timeout_seconds
         effective_max_calls = max_tool_calls or self.config.pipeline.builder_max_tool_calls
 
+        # Doc writer does more reading/orientation — give it a wider loop
+        # detection window to avoid false positives.
+        window = 8 if stage == PipelineStage.DOCUMENT else 5
+
         result = await run_tool_loop(
             provider=self.provider,
             system_prompt=system_prompt,
@@ -575,6 +591,7 @@ class Supervisor:
             project_dir=self.project_dir,
             max_tool_calls=effective_max_calls,
             timeout_seconds=effective_timeout,
+            loop_detection_window=window,
         )
 
         if result.status in ("stuck", "max_calls"):
@@ -587,6 +604,8 @@ class Supervisor:
                 error=result.final_text,
                 input_tokens=result.input_tokens,
                 output_tokens=result.output_tokens,
+                cache_creation_input_tokens=result.cache_creation_input_tokens,
+                cache_read_input_tokens=result.cache_read_input_tokens,
             )
 
         # Write artifact
@@ -606,12 +625,19 @@ class Supervisor:
             raw_response=result.final_text,
             input_tokens=result.input_tokens,
             output_tokens=result.output_tokens,
+            cache_creation_input_tokens=result.cache_creation_input_tokens,
+            cache_read_input_tokens=result.cache_read_input_tokens,
         )
 
     async def _build_evaluate_loop(self, sprint_name: str) -> StageResult:
         """Run build-evaluate loop for a sprint."""
         max_loops = self.config.pipeline.max_loops
         console.print(f"\n[bold yellow]Build-Evaluate: {sprint_name}[/bold yellow]")
+
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_cache_creation = 0
+        total_cache_read = 0
 
         # Load sprint contract
         sprint_path = self.project_dir / ".productteam" / "sprints" / f"{sprint_name}.yaml"
@@ -666,6 +692,11 @@ class Supervisor:
                 timeout_seconds=self.config.pipeline.builder_timeout_seconds,
             )
 
+            total_input_tokens += build_result.input_tokens
+            total_output_tokens += build_result.output_tokens
+            total_cache_creation += build_result.cache_creation_input_tokens
+            total_cache_read += build_result.cache_read_input_tokens
+
             if build_result.status in ("stuck", "max_calls"):
                 # Don't terminate — let the evaluator assess what was built.
                 # The builder may have written enough code before hitting the limit.
@@ -686,6 +717,10 @@ class Supervisor:
                     stage=PipelineStage.BUILD,
                     status="complete",
                     artifact_path=str(build_artifact),
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    cache_creation_input_tokens=total_cache_creation,
+                    cache_read_input_tokens=total_cache_read,
                 )
 
             # Evaluate
@@ -718,6 +753,11 @@ class Supervisor:
                 max_tool_calls=self.config.pipeline.builder_max_tool_calls,
                 timeout_seconds=self.config.pipeline.builder_timeout_seconds,
             )
+
+            total_input_tokens += eval_result.input_tokens
+            total_output_tokens += eval_result.output_tokens
+            total_cache_creation += eval_result.cache_creation_input_tokens
+            total_cache_read += eval_result.cache_read_input_tokens
 
             if eval_result.status == "stuck":
                 console.print(f"  [red]Evaluator stuck: {eval_result.final_text}[/red]")
@@ -779,6 +819,10 @@ class Supervisor:
                     stage=PipelineStage.BUILD,
                     status="complete",
                     artifact_path=str(build_artifact),
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    cache_creation_input_tokens=total_cache_creation,
+                    cache_read_input_tokens=total_cache_read,
                 )
 
             if verdict == "fail":
@@ -790,6 +834,10 @@ class Supervisor:
                     status="failed",
                     error=f"Evaluator returned FAIL on loop {loop_num}",
                     raw_response=eval_response,
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    cache_creation_input_tokens=total_cache_creation,
+                    cache_read_input_tokens=total_cache_read,
                 )
 
             # NEEDS_WORK — continue loop with feedback for builder
@@ -807,6 +855,10 @@ class Supervisor:
             stage=PipelineStage.BUILD,
             status="stuck",
             error=f"Max loops ({max_loops}) exhausted",
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            cache_creation_input_tokens=total_cache_creation,
+            cache_read_input_tokens=total_cache_read,
         )
 
     async def _gate(self, gate_name: str, artifact_path: str) -> bool:

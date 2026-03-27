@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.2] - 2026-03-27
+
+### Fixed
+- **Build stage token counts now correctly accumulated** — `_build_evaluate_loop` was creating `StageResult` objects without populating token counts from inner `ToolLoopResult`. Builder + evaluator tokens are now summed across all loops.
+- **Design evaluator now respects quality level** — Quality gate (`standard`/`thorough`/`strict`) was injected into the build evaluator but not the design evaluator. Design eval was running full adversarial evaluation (791K input tokens) regardless of quality setting. Now gated, with `standard` targeting 8-12 tool calls.
+- **Doc writer loop detection window increased** — Loop detection was triggering after 3 consecutive identical calls, too aggressive for the doc writer which legitimately reads the same file multiple times. Default window increased from 3 to 5, with doc writer using 8. Window is now configurable via `loop_detection_window` parameter.
+- **Box-drawing characters banned from evaluator reports** — Design evaluator now instructed to use plain YAML only. Box-drawing characters caused Windows encoding errors and inflated token counts.
+- **Cache hit fields now tracked** — Anthropic provider now extracts `cache_creation_input_tokens` and `cache_read_input_tokens` from the SDK response. These propagate through `ToolLoopResult`, `StageResult`, and appear in the post-run cost summary.
+
 ## [2.5.0] - 2026-03-27
 
 ### Added

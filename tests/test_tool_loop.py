@@ -407,7 +407,7 @@ async def test_tool_loop_max_calls_exceeded(tmp_path):
 
 @pytest.mark.asyncio
 async def test_tool_loop_infinite_loop_detection(tmp_path):
-    """Loop detects identical tool calls 3 times in a row."""
+    """Loop detects identical tool calls 5 times in a row (default window)."""
     call_count = 0
 
     async def mock_complete_with_tools(*args, **kwargs):
@@ -440,6 +440,7 @@ async def test_tool_loop_infinite_loop_detection(tmp_path):
 
     assert result.status == "stuck"
     assert "Loop detected" in result.final_text
+    assert result.tool_call_count == 5  # Window is now 5, not 3
 
 
 def test_builder_tools_count():
@@ -646,3 +647,108 @@ def test_truncate_messages_no_op_when_short():
     ]
     truncated = _truncate_messages(messages)
     assert truncated == messages
+
+
+# ---------------------------------------------------------------------------
+# v2.5.2 Loop detection window tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_loop_detection_window_default_is_5(tmp_path):
+    """Default loop detection window is 5 consecutive identical calls."""
+    call_count = 0
+
+    async def always_same_call(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return {
+            "role": "assistant",
+            "content": [{
+                "type": "tool_use",
+                "id": f"toolu_{call_count:03d}",
+                "name": "list_dir",
+                "input": {"path": "."},
+            }],
+            "stop_reason": "tool_use",
+        }
+
+    (tmp_path / "dummy.txt").write_text("x")
+    mock_provider = AsyncMock()
+    mock_provider.complete_with_tools = always_same_call
+
+    result = await run_tool_loop(
+        provider=mock_provider,
+        system_prompt="test",
+        initial_user_message="go",
+        project_dir=tmp_path,
+        max_tool_calls=50,
+    )
+
+    assert result.status == "stuck"
+    assert result.tool_call_count == 5  # Triggered after 5, not 3
+
+
+@pytest.mark.asyncio
+async def test_loop_detection_window_configurable(tmp_path):
+    """loop_detection_window parameter controls when stuck is triggered."""
+    call_count = 0
+
+    async def always_same_call(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return {
+            "role": "assistant",
+            "content": [{
+                "type": "tool_use",
+                "id": f"toolu_{call_count:03d}",
+                "name": "read_file",
+                "input": {"path": "test.txt"},
+            }],
+            "stop_reason": "tool_use",
+        }
+
+    (tmp_path / "test.txt").write_text("content")
+    mock_provider = AsyncMock()
+    mock_provider.complete_with_tools = always_same_call
+
+    result = await run_tool_loop(
+        provider=mock_provider,
+        system_prompt="test",
+        initial_user_message="go",
+        project_dir=tmp_path,
+        max_tool_calls=50,
+        loop_detection_window=8,
+    )
+
+    assert result.status == "stuck"
+    assert result.tool_call_count == 8  # Triggered at 8, not 5
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_result_has_cache_fields(tmp_path):
+    """ToolLoopResult includes cache_creation and cache_read token fields."""
+    mock_provider = AsyncMock()
+    mock_provider.complete_with_tools = AsyncMock(return_value={
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Done."}],
+        "stop_reason": "end_turn",
+        "usage": {
+            "input_tokens": 1000,
+            "output_tokens": 50,
+            "cache_creation_input_tokens": 800,
+            "cache_read_input_tokens": 200,
+        },
+    })
+
+    result = await run_tool_loop(
+        provider=mock_provider,
+        system_prompt="You are a builder.",
+        initial_user_message="Build something.",
+        project_dir=tmp_path,
+    )
+
+    assert result.input_tokens == 1000
+    assert result.output_tokens == 50
+    assert result.cache_creation_input_tokens == 800
+    assert result.cache_read_input_tokens == 200

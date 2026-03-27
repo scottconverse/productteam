@@ -323,6 +323,8 @@ class ToolLoopResult:
         messages: list[dict],
         input_tokens: int = 0,
         output_tokens: int = 0,
+        cache_creation_input_tokens: int = 0,
+        cache_read_input_tokens: int = 0,
     ):
         self.final_text = final_text
         self.tool_call_count = tool_call_count
@@ -330,6 +332,8 @@ class ToolLoopResult:
         self.messages = messages
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
+        self.cache_creation_input_tokens = cache_creation_input_tokens
+        self.cache_read_input_tokens = cache_read_input_tokens
 
 
 async def run_tool_loop(
@@ -339,6 +343,7 @@ async def run_tool_loop(
     project_dir: Path,
     max_tool_calls: int = 50,
     timeout_seconds: float | None = None,
+    loop_detection_window: int = 5,
 ) -> ToolLoopResult:
     """Run the builder tool-use loop.
 
@@ -355,6 +360,7 @@ async def run_tool_loop(
         project_dir: Project directory for tool execution.
         max_tool_calls: Maximum tool calls before marking stuck.
         timeout_seconds: Wall-clock timeout for the entire loop. None = no limit.
+        loop_detection_window: Consecutive identical calls before marking stuck.
 
     Returns:
         ToolLoopResult with final text, call count, and status.
@@ -364,7 +370,7 @@ async def run_tool_loop(
             return await asyncio.wait_for(
                 _run_tool_loop_inner(
                     provider, system_prompt, initial_user_message,
-                    project_dir, max_tool_calls,
+                    project_dir, max_tool_calls, loop_detection_window,
                 ),
                 timeout=timeout_seconds,
             )
@@ -377,7 +383,7 @@ async def run_tool_loop(
             )
     return await _run_tool_loop_inner(
         provider, system_prompt, initial_user_message,
-        project_dir, max_tool_calls,
+        project_dir, max_tool_calls, loop_detection_window,
     )
 
 
@@ -411,6 +417,7 @@ async def _run_tool_loop_inner(
     initial_user_message: str,
     project_dir: Path,
     max_tool_calls: int = 50,
+    loop_detection_window: int = 5,
 ) -> ToolLoopResult:
     """Inner tool loop implementation."""
     messages: list[dict] = [
@@ -419,6 +426,8 @@ async def _run_tool_loop_inner(
     total_tool_calls = 0
     total_input_tokens = 0
     total_output_tokens = 0
+    total_cache_creation = 0
+    total_cache_read = 0
     last_tool_calls: list[tuple[str, str]] = []  # (name, args_hash) for loop detection
 
     while True:
@@ -432,6 +441,8 @@ async def _run_tool_loop_inner(
         usage = response.get("usage", {})
         total_input_tokens += usage.get("input_tokens", 0)
         total_output_tokens += usage.get("output_tokens", 0)
+        total_cache_creation += usage.get("cache_creation_input_tokens", 0)
+        total_cache_read += usage.get("cache_read_input_tokens", 0)
 
         # Check if response has tool_use blocks
         content = response.get("content", [])
@@ -448,6 +459,8 @@ async def _run_tool_loop_inner(
                 messages=messages,
                 input_tokens=total_input_tokens,
                 output_tokens=total_output_tokens,
+                cache_creation_input_tokens=total_cache_creation,
+                cache_read_input_tokens=total_cache_read,
             )
 
         # Append assistant message to conversation
@@ -461,23 +474,25 @@ async def _run_tool_loop_inner(
             tool_input = tool_use["input"]
             tool_id = tool_use["id"]
 
-            # Loop detection: same tool + same args 3 times in a row
+            # Loop detection: same tool + same args N times in a row
             args_hash = json.dumps(tool_input, sort_keys=True)
             call_sig = (tool_name, args_hash)
             last_tool_calls.append(call_sig)
-            if len(last_tool_calls) > 3:
+            if len(last_tool_calls) > loop_detection_window:
                 last_tool_calls.pop(0)
             if (
-                len(last_tool_calls) == 3
-                and last_tool_calls[0] == last_tool_calls[1] == last_tool_calls[2]
+                len(last_tool_calls) == loop_detection_window
+                and len(set(last_tool_calls)) == 1
             ):
                 return ToolLoopResult(
-                    final_text=f"Loop detected: {tool_name} called 3 times with identical args",
+                    final_text=f"Loop detected: {tool_name} called {loop_detection_window} times with identical args",
                     tool_call_count=total_tool_calls,
                     status="stuck",
                     messages=messages,
                     input_tokens=total_input_tokens,
                     output_tokens=total_output_tokens,
+                    cache_creation_input_tokens=total_cache_creation,
+                    cache_read_input_tokens=total_cache_read,
                 )
 
             # Execute the tool
@@ -501,4 +516,6 @@ async def _run_tool_loop_inner(
                 messages=messages,
                 input_tokens=total_input_tokens,
                 output_tokens=total_output_tokens,
+                cache_creation_input_tokens=total_cache_creation,
+                cache_read_input_tokens=total_cache_read,
             )
