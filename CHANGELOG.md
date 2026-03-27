@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.5.6] - 2026-03-27
+
+### Fixed
+- **Budget breaker cost formula now includes cached tokens** — Cost calculation now accounts for `cache_creation_input_tokens` (1.25x rate) and `cache_read_input_tokens` (0.1x rate), not just `input_tokens`. Without this fix, the budget breaker saw ~$0 when caching was active because `input_tokens` drops to ~300 once the cache is warm.
+- **All remaining skill files padded above cache threshold** — Planner, prd-writer, doc-writer, and evaluator-design skill files now exceed the 4,096 token minimum required for Anthropic prompt caching. Previously only builder and evaluator were padded.
+
+## [2.5.5] - 2026-03-27
+
+### Added
+- **`--budget` CLI flag with cost circuit breaker** — Sets a maximum dollar spend for a pipeline run (default: $2.00). When cumulative cost exceeds the limit, `BudgetExceededError` kills the pipeline mid-loop. All work completed so far is saved to disk. Configurable via `budget_usd` in `productteam.toml`.
+- **Cache threshold validation on startup** — Pipeline refuses to run if skill prompts are below the model's minimum cacheable token count (4,096 for Haiku 4.5, 1,024 for Sonnet). Prevents silent cache misses that inflate costs.
+- **23 new tests for cost controls** — Budget breaker, cache threshold validation, and BudgetExceededError behavior.
+
+### Changed
+- **Builder and evaluator skill files padded** — Skill files padded with useful reference content to exceed cache thresholds, ensuring prompt caching activates on every call.
+
 ## [2.5.4] - 2026-03-27
 
 ### Added

@@ -169,6 +169,7 @@ ProductTeam runs LLM-generated shell commands on your machine. That's inherently
 | `productteam run "concept"` | Run the full pipeline |
 | `productteam run` | Resume from current state |
 | `productteam run --auto-approve` | Headless / CI mode |
+| `productteam run --budget 1.50` | Set cost limit (default $2.00) |
 | `productteam run --step prd` | Run only a specific stage |
 | `productteam recover` | Reset stuck stages and re-run |
 | `productteam status` | Show pipeline status |
@@ -199,6 +200,20 @@ Costs scale with:
 - **Quality level** — `strict` costs 3-5x more than `standard`
 - **Model choice** — Haiku is ~4x cheaper than Sonnet per token
 
+**Cost circuit breaker (v2.5.5+):**
+The `--budget` flag sets a hard dollar limit on a pipeline run. When cumulative cost exceeds the limit, `BudgetExceededError` kills the pipeline mid-loop and saves all work to disk. Default: $2.00.
+
+```bash
+productteam run "my idea" --budget 1.50   # kill if cost exceeds $1.50
+```
+
+You can also set it permanently in `productteam.toml`:
+
+```toml
+[pipeline]
+budget_usd = 2.00
+```
+
 **To minimize cost:**
 - Use `quality = "standard"` in `productteam.toml` (default)
 - Use Haiku or a local Ollama model for development iteration
@@ -222,6 +237,7 @@ max_loops = 3                   # build-evaluate iterations (increase for comple
 max_sprints = 8                 # max sprint contracts
 quality = "standard"            # standard | thorough | strict (controls eval depth + cost)
 builder_max_tool_calls = 75     # tool call limit per doer run
+budget_usd = 2.00               # cost circuit breaker (kills pipeline if exceeded)
 auto_approve = false            # true for headless/CI mode
 
 [gates]
