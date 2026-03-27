@@ -225,13 +225,18 @@ async def test_build_evaluate_needs_work_then_pass(tmp_path):
 
 @pytest.mark.asyncio
 async def test_build_evaluate_fail_on_verdict(tmp_path):
-    """Build-evaluate loop: FAIL verdict escalates immediately."""
+    """Build-evaluate loop: FAIL verdict retries, then escalates on final loop."""
     _init_project(tmp_path)
     (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
         "sprint: 1\ntitle: Test\n"
     )
 
-    config = _make_config()
+    # Use max_loops=1 so FAIL is terminal on first loop
+    config = _make_config(pipeline={
+        "provider": "anthropic", "model": "test", "max_loops": 1,
+        "stage_timeout_seconds": 10, "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5, "auto_approve": False,
+    })
     mock_provider = AsyncMock()
 
     mock_provider.complete_with_tools = AsyncMock(side_effect=[

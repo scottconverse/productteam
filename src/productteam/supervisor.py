@@ -352,9 +352,18 @@ class Supervisor:
                 f"Evaluate sprint {sprint_name}",
             )
         elif stage == PipelineStage.DOCUMENT:
+            file_listing = self._project_file_listing()
+            doc_context = (
+                f"Write documentation for the project.\n\n"
+                f"Concept: {concept}\n\n"
+                f"All tools operate relative to the project root. "
+                f"Use relative paths (e.g., 'src/main.py', not '/tmp/src/main.py'). "
+                f"Start by reading existing source files listed below.\n\n"
+                f"Project files:\n{file_listing}"
+            )
             return await self._run_tool_loop_stage(
                 stage, "doc-writer",
-                f"Write documentation for the project. Concept: {concept}",
+                doc_context,
                 max_tool_calls=self.config.pipeline.doc_writer_max_tool_calls,
             )
         elif stage == PipelineStage.EVALUATE_DESIGN:
@@ -365,6 +374,26 @@ class Supervisor:
             )
         else:
             return StageResult(stage=stage, status="skipped")
+
+    def _project_file_listing(self, max_files: int = 100) -> str:
+        """Return a compact listing of project files for context."""
+        lines = []
+        count = 0
+        for item in sorted(self.project_dir.rglob("*")):
+            if count >= max_files:
+                lines.append(f"... ({count}+ files, truncated)")
+                break
+            rel = item.relative_to(self.project_dir)
+            parts = rel.parts
+            # Skip hidden dirs (except .productteam/sprints), __pycache__, .venv
+            if any(p.startswith(".") and p not in (".productteam",) for p in parts):
+                continue
+            if any(p in ("__pycache__", ".venv", "node_modules", ".git") for p in parts):
+                continue
+            if item.is_file():
+                lines.append(str(rel))
+                count += 1
+        return "\n".join(lines) if lines else "(empty project)"
 
     def _notify_stage(self, stage_name: str) -> None:
         """Fire the stage callback if one was set."""
@@ -504,6 +533,7 @@ class Supervisor:
             )
 
         sprint_contract = sprint_path.read_text(encoding="utf-8")
+        last_eval_feedback: str = ""
 
         for loop_num in range(1, max_loops + 1):
             console.print(f"  [dim]Loop {loop_num}/{max_loops}[/dim]")
@@ -528,6 +558,11 @@ class Supervisor:
                 f"{sprint_contract}\n\n"
                 f"This is loop {loop_num} of {max_loops}."
             )
+            if last_eval_feedback:
+                build_prompt += (
+                    f"\n\n--- EVALUATOR FEEDBACK FROM PREVIOUS LOOP ---\n"
+                    f"Fix these issues:\n\n{last_eval_feedback}"
+                )
 
             build_result = await run_tool_loop(
                 provider=self.provider,
@@ -661,18 +696,24 @@ class Supervisor:
                 )
 
             if verdict == "fail":
-                console.print(f"  [red]Sprint {sprint_name} FAILED — escalating[/red]")
-                self.state["stages"]["evaluate"]["status"] = "failed"
-                _save_state(self.project_dir, self.state)
-                return StageResult(
-                    stage=PipelineStage.BUILD,
-                    status="failed",
-                    error=f"Evaluator returned FAIL on loop {loop_num}",
-                    raw_response=eval_response,
-                )
+                if loop_num >= max_loops:
+                    # Terminal only on final loop
+                    console.print(f"  [red]Sprint {sprint_name} FAILED after {max_loops} loops — escalating[/red]")
+                    self.state["stages"]["evaluate"]["status"] = "failed"
+                    _save_state(self.project_dir, self.state)
+                    return StageResult(
+                        stage=PipelineStage.BUILD,
+                        status="failed",
+                        error=f"Evaluator returned FAIL on loop {loop_num}",
+                        raw_response=eval_response,
+                    )
+                else:
+                    # Treat FAIL like NEEDS_WORK on non-final loops — let builder retry
+                    console.print(f"  [yellow]FAIL on loop {loop_num} — retrying with feedback[/yellow]")
+                    verdict = "needs_work"
 
-            # NEEDS_WORK — continue loop with summarized feedback
-            sprint_contract += "\n\n" + self._summarize_eval_feedback(eval_response, loop_num)
+            # NEEDS_WORK — continue loop with feedback for builder
+            last_eval_feedback = eval_response[-3000:]  # Last 3KB of evaluator output
 
         # Exhausted all loops
         console.print(f"  [red]Max loops ({max_loops}) exhausted for {sprint_name}[/red]")

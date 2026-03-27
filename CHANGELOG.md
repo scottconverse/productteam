@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.3] - 2026-03-27
+
+### Fixed
+- **Build-evaluate FAIL retry** — FAIL verdict on non-final loops now retries with evaluator feedback instead of terminating immediately. Only the final loop's FAIL is terminal.
+- **Evaluator feedback passed to builder** — Builder now receives the evaluator's previous feedback on retry loops, enabling targeted fixes instead of blind rebuilds.
+- **Doc writer project orientation** — Doc writer now receives a file listing of the project, preventing it from exploring wrong paths (`/tmp`, `/root`) and getting stuck in write loops.
+
 ## [2.4.2] - 2026-03-26
 
 ### Added
