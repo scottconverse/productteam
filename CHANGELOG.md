@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.5.7] - 2026-03-27
+
+### Fixed
+- Version sync: all 5 version locations now consistent (was 2.5.4 in __init__.py and architecture.svg while other files said 2.5.6)
+
 ## [2.5.6] - 2026-03-27
 
 ### Fixed
