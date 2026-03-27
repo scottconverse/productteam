@@ -265,3 +265,172 @@ async def test_gemini_complete(monkeypatch):
         )
 
     assert result == "Hello from Gemini"
+
+
+@pytest.mark.asyncio
+async def test_gemini_complete_with_tools(monkeypatch):
+    """GeminiProvider.complete_with_tools() returns tool_use blocks."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "candidates": [{
+            "content": {
+                "parts": [
+                    {
+                        "functionCall": {
+                            "name": "read_file",
+                            "args": {"path": "src/main.py"},
+                        }
+                    }
+                ],
+                "role": "model",
+            }
+        }]
+    }
+
+    with patch("productteam.providers.gemini.httpx") as mock_httpx:
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.AsyncClient = MagicMock(return_value=mock_client)
+
+        p = get_provider(provider="gemini")
+        result = await p.complete_with_tools(
+            system="You are a builder.",
+            messages=[{"role": "user", "content": "Read the file"}],
+            tools=[{"name": "read_file", "description": "Read a file", "input_schema": {"type": "object"}}],
+        )
+
+    assert result["role"] == "assistant"
+    assert result["stop_reason"] == "tool_use"
+    assert len(result["content"]) == 1
+    block = result["content"][0]
+    assert block["type"] == "tool_use"
+    assert block["name"] == "read_file"
+    assert block["input"] == {"path": "src/main.py"}
+    assert block["id"].startswith("toolu_")
+
+
+@pytest.mark.asyncio
+async def test_ollama_complete_with_tools():
+    """OllamaProvider.complete_with_tools() returns tool_use blocks."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "function": {
+                        "name": "read_file",
+                        "arguments": {"path": "src/main.py"},
+                    }
+                }
+            ],
+        }
+    }
+
+    with patch("productteam.providers.ollama.httpx") as mock_httpx:
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.AsyncClient = MagicMock(return_value=mock_client)
+
+        p = get_provider(provider="ollama")
+        result = await p.complete_with_tools(
+            system="You are a builder.",
+            messages=[{"role": "user", "content": "Read the file"}],
+            tools=[{"name": "read_file", "description": "Read a file", "input_schema": {"type": "object"}}],
+        )
+
+    assert result["role"] == "assistant"
+    assert result["stop_reason"] == "tool_use"
+    assert len(result["content"]) == 1
+    block = result["content"][0]
+    assert block["type"] == "tool_use"
+    assert block["name"] == "read_file"
+    assert block["input"] == {"path": "src/main.py"}
+    assert block["id"].startswith("toolu_")
+
+
+@pytest.mark.asyncio
+async def test_openai_complete_with_tools(monkeypatch):
+    """OpenAIProvider.complete_with_tools() returns tool_use blocks."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "choices": [{
+            "message": {
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_abc123",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": '{"path": "src/main.py"}',
+                        },
+                    }
+                ],
+            },
+            "finish_reason": "tool_calls",
+        }]
+    }
+
+    with patch("productteam.providers.openai.httpx") as mock_httpx:
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.AsyncClient = MagicMock(return_value=mock_client)
+
+        p = get_provider(provider="openai")
+        result = await p.complete_with_tools(
+            system="You are a builder.",
+            messages=[{"role": "user", "content": "Read the file"}],
+            tools=[{"name": "read_file", "description": "Read a file", "input_schema": {"type": "object"}}],
+        )
+
+    assert result["role"] == "assistant"
+    assert result["stop_reason"] == "tool_use"
+    assert len(result["content"]) == 1
+    block = result["content"][0]
+    assert block["type"] == "tool_use"
+    assert block["id"] == "call_abc123"
+    assert block["name"] == "read_file"
+    assert block["input"] == {"path": "src/main.py"}
+
+
+# ---------------------------------------------------------------------------
+# model_id() tests
+# ---------------------------------------------------------------------------
+
+
+def test_gemini_model_id(monkeypatch):
+    """GeminiProvider.model_id() returns the configured model."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    p = get_provider(provider="gemini", model="gemini-2.0-pro")
+    assert p.model_id() == "gemini-2.0-pro"
+
+
+def test_ollama_model_id():
+    """OllamaProvider.model_id() returns the configured model."""
+    p = get_provider(provider="ollama", model="mistral")
+    assert p.model_id() == "mistral"
+
+
+def test_openai_model_id(monkeypatch):
+    """OpenAIProvider.model_id() returns the configured model."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    p = get_provider(provider="openai", model="gpt-4-turbo")
+    assert p.model_id() == "gpt-4-turbo"

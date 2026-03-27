@@ -4,9 +4,10 @@ on: [push, pull_request]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
@@ -14,4 +15,4 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
-      - run: pytest -m "not live" --cov=productteam --cov-report=term-missing --cov-fail-under=75
+      - run: pytest -m "not live" --cov=productteam --cov-report=term-missing --cov-fail-under=80

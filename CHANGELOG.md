@@ -8,12 +8,16 @@
 - **Design evaluator verdict disk fallback** — when the design evaluator's text response has no parseable verdict, the supervisor checks `eval-*-design.yaml` files on disk. Same pattern as the build evaluator fallback added in v2.2.0. Fixes pipelines reporting "stuck" when the design evaluation actually passed.
 
 ### Fixed
+- **`run_bash` WinError production handling** — `_execute_tool` now catches `OSError` separately from generic exceptions, returning a structured JSON error with a descriptive message instead of an opaque crash on Windows when subprocess handles are invalid.
+- **Windows credential filter gaps** — `_validate_command` now blocks PowerShell (`$env:`, `Get-ChildItem Env:`) and .NET (`[System.Environment]::GetEnvironmentVariable`) environment access patterns, matching the existing Unix credential filters.
 - **`run_bash` tests on Windows** — `test_execute_run_bash` and `test_execute_run_bash_timeout` now use `python -c` on Windows instead of `echo`/`sleep` which depend on Unix shell builtins. Tests pass on all platforms.
 - **Doc Writer termination validated** — the prompt-based termination instruction ("stop after writing all files") was confirmed working under live conditions. The Doc Writer exits naturally within the stage timeout. No `max_tool_calls` cap was needed.
 
 ### Infrastructure
-- 244 unit tests passing on Windows and Linux (up from 239)
-- CI coverage threshold lowered from 80% to 75% — providers (Gemini, Ollama, OpenAI) and CLI commands are only covered by live integration tests which are excluded from CI. Threshold was unachievable and CI has been red since 2.2.0.
+- 270 unit tests passing on Windows and Linux (up from 239)
+- Coverage restored to 80% (was 75.8%): mocked provider `complete_with_tools` tests for Gemini/Ollama/OpenAI, supervisor error path and artifact tests, credential filter tests
+- CI matrix expanded: Windows (`windows-latest`) added alongside Ubuntu for all Python versions
+- Windows credential filter tests added for PowerShell and .NET environment access patterns
 - Full pipeline validated end-to-end with fresh `productteam init` + `productteam run` on the bmark reference project
 
 ## [2.2.0] - 2026-03-26

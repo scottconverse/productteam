@@ -1014,3 +1014,241 @@ async def test_stage_callback_called_during_pipeline(tmp_path):
     supervisor._notify_stage("prd")
     supervisor._notify_stage("plan")
     assert stages_seen == ["prd", "plan"]
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap tests: state, artifacts, sprints, eval feedback
+# ---------------------------------------------------------------------------
+
+
+def test_load_state_bad_schema_version(tmp_path):
+    """_load_state raises ValueError on unsupported schema version."""
+    pt_dir = tmp_path / ".productteam"
+    pt_dir.mkdir()
+    (pt_dir / "state.json").write_text('{"schema_version": 999}')
+    with pytest.raises(ValueError, match="schema version 999"):
+        _load_state(tmp_path)
+
+
+def test_find_sprints_no_dir(tmp_path):
+    """_find_sprints returns empty list when sprints dir doesn't exist."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    # Remove the sprints directory
+    import shutil
+    shutil.rmtree(tmp_path / ".productteam" / "sprints")
+    assert supervisor._find_sprints() == []
+
+
+def test_find_sprints_with_yaml(tmp_path):
+    """_find_sprints finds YAML files in sprints directory."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    sprints_dir = tmp_path / ".productteam" / "sprints"
+    (sprints_dir / "sprint-001.yaml").write_text("sprint: 1")
+    (sprints_dir / "sprint-002.yml").write_text("sprint: 2")
+    (sprints_dir / "notes.txt").write_text("not a sprint")
+    result = supervisor._find_sprints()
+    assert result == ["sprint-001", "sprint-002"]
+
+
+def test_write_artifact_prd(tmp_path):
+    """_write_artifact writes PRD to correct path."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    path = supervisor._write_artifact(PipelineStage.PRD, "# PRD content")
+    assert "prds" in path
+    assert (tmp_path / path).read_text() == "# PRD content"
+
+
+def test_write_artifact_plan(tmp_path):
+    """_write_artifact writes plan to correct path."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    path = supervisor._write_artifact(PipelineStage.PLAN, "plan text")
+    assert "plan.md" in path
+
+
+def test_write_artifact_evaluate(tmp_path):
+    """_write_artifact writes evaluation to correct path."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    path = supervisor._write_artifact(PipelineStage.EVALUATE, "eval: pass")
+    assert "evaluations" in path
+
+
+def test_write_artifact_unknown_stage(tmp_path):
+    """_write_artifact handles stages without specific paths."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    path = supervisor._write_artifact(PipelineStage.EVALUATE_DESIGN, "design eval")
+    assert "evaluate-design-output.md" in path
+
+
+def test_read_artifact_no_path(tmp_path):
+    """_read_artifact returns empty string when no artifact path recorded."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor.state["stages"]["prd"] = {"status": "complete"}  # no artifact key
+    result = supervisor._read_artifact("prd")
+    assert result == ""
+
+
+def test_read_artifact_missing_file(tmp_path):
+    """_read_artifact returns empty string when artifact file is missing."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor.state["stages"]["prd"] = {
+        "status": "complete",
+        "artifact": ".productteam/prds/prd-v1.md",
+    }
+    result = supervisor._read_artifact("prd")
+    assert result == ""
+
+
+def test_read_artifact_success(tmp_path):
+    """_read_artifact reads existing artifact file."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    prd_dir = tmp_path / ".productteam" / "prds"
+    prd_dir.mkdir(parents=True)
+    (prd_dir / "prd-v1.md").write_text("# My PRD")
+    supervisor.state["stages"]["prd"] = {
+        "status": "complete",
+        "artifact": ".productteam/prds/prd-v1.md",
+    }
+    result = supervisor._read_artifact("prd")
+    assert result == "# My PRD"
+
+
+def test_summarize_eval_feedback_structured(tmp_path):
+    """_summarize_eval_feedback extracts findings from YAML."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    eval_yaml = (
+        "evaluator_verdict: NEEDS_WORK\n"
+        "acceptance_criteria:\n"
+        "  - criterion: Tests pass\n"
+        "    status: FAIL\n"
+        "    evidence: 2 tests failed\n"
+        "  - criterion: CLI works\n"
+        "    status: PASS\n"
+        "    evidence: all commands work\n"
+        "additional_findings:\n"
+        "  - severity: HIGH\n"
+        "    finding: No error handling\n"
+        "    suggestion: Add try/except\n"
+        "  - severity: LOW\n"
+        "    finding: Style nit\n"
+        "    suggestion: Use black\n"
+        "summary: Needs error handling\n"
+    )
+    result = supervisor._summarize_eval_feedback(eval_yaml, 1)
+    assert "FAIL: Tests pass" in result
+    assert "HIGH: No error handling" in result
+    assert "LOW" not in result  # LOW findings excluded
+    assert "Summary: Needs error handling" in result
+
+
+def test_summarize_eval_feedback_fallback(tmp_path):
+    """_summarize_eval_feedback truncates non-YAML response."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    result = supervisor._summarize_eval_feedback("Just a plain text response.", 2)
+    assert "loop 2" in result
+    assert "Just a plain text" in result
+
+
+def test_parse_verdict_yaml_error(tmp_path):
+    """_parse_verdict handles malformed YAML gracefully."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    # Malformed YAML that will cause parse error
+    result = supervisor._parse_verdict("evaluator_verdict: PASS\n  bad indent: [")
+    # Should still find PASS via line scan fallback
+    assert result == "pass"
+
+
+def test_parse_verdict_line_scan_fail(tmp_path):
+    """_parse_verdict line scan catches 'fail' on verdict lines."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    assert supervisor._parse_verdict("verdict: FAIL\nSome details.") == "fail"
+
+
+@pytest.mark.asyncio
+async def test_build_loop_missing_sprint_contract(tmp_path):
+    """_build_evaluate_loop returns failed when sprint contract is missing."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock(), auto_approve=True)
+    result = await supervisor._build_evaluate_loop("sprint-nonexistent")
+    assert result.status == "failed"
+    assert "not found" in result.error
+
+
+@pytest.mark.asyncio
+async def test_build_loop_skill_not_found(tmp_path):
+    """_build_evaluate_loop returns failed when builder skill is missing."""
+    _init_project(tmp_path)
+    # Write sprint contract but delete builder skill
+    sprints_dir = tmp_path / ".productteam" / "sprints"
+    (sprints_dir / "sprint-001.yaml").write_text("sprint: 1\ntitle: Test\n")
+    import shutil
+    shutil.rmtree(tmp_path / ".claude" / "skills" / "builder")
+
+    config = _make_config()
+    mock_provider = AsyncMock()
+    supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
+    result = await supervisor._build_evaluate_loop("sprint-001")
+    assert result.status == "failed"
+    assert "Skill not found" in result.error
+
+
+@pytest.mark.asyncio
+async def test_run_no_concept_fails(tmp_path):
+    """run() with no concept and no saved concept returns failed."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock(), auto_approve=True)
+    result = await supervisor.run()
+    assert result.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_thinker_stage_skill_not_found(tmp_path):
+    """_run_thinker_stage returns failed when skill file is missing."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock(), auto_approve=True)
+    result = await supervisor._run_thinker_stage(
+        PipelineStage.PRD, "nonexistent-skill", "test"
+    )
+    assert result.status == "failed"
+    assert "Skill not found" in result.error
+
+
+@pytest.mark.asyncio
+async def test_tool_loop_stage_skill_not_found(tmp_path):
+    """_run_tool_loop_stage returns failed when skill file is missing."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, AsyncMock(), auto_approve=True)
+    result = await supervisor._run_tool_loop_stage(
+        PipelineStage.PLAN, "nonexistent-skill", "test"
+    )
+    assert result.status == "failed"
+    assert "Skill not found" in result.error

@@ -121,6 +121,27 @@ def test_validate_command_echo_env_var_blocked():
     assert result is not None
 
 
+def test_validate_command_blocks_powershell_env_access():
+    """PowerShell $env:SECRET is blocked."""
+    result = _validate_command("echo $env:ANTHROPIC_API_KEY")
+    assert result is not None
+    assert "environment" in result.lower()
+
+
+def test_validate_command_blocks_get_childitem_env():
+    """PowerShell Get-ChildItem Env: is blocked."""
+    result = _validate_command("Get-ChildItem Env:")
+    assert result is not None
+    assert "environment" in result.lower()
+
+
+def test_validate_command_blocks_dotnet_env_access():
+    """.NET [System.Environment]::GetEnvironmentVariable is blocked."""
+    result = _validate_command("[System.Environment]::GetEnvironmentVariable('SECRET')")
+    assert result is not None
+    assert "environment" in result.lower()
+
+
 # ---------------------------------------------------------------------------
 # Tool execution tests
 # ---------------------------------------------------------------------------

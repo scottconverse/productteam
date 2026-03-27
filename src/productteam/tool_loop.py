@@ -114,6 +114,14 @@ ENV_DUMP_PATTERNS = [
 # Patterns where "env" is used as a command (not as part of a word like "poetry env")
 ENV_CMD_PATTERNS = [" env | ", " env|"]
 
+# Windows/PowerShell patterns that dump or read environment variables
+WIN_ENV_PATTERNS = [
+    "$env:",                                        # PowerShell env access
+    "get-childitem env:",                           # PowerShell env listing
+    "[system.environment]::getenvironmentvariable",  # .NET env access
+    "[environment]::getenvironmentvariable",         # .NET shorthand
+]
+
 # Credential-adjacent keywords
 CRED_KEYWORDS = ["api_key", "token", "secret", "password", "credential"]
 
@@ -141,6 +149,11 @@ def _validate_command(command: str) -> str | None:
     # "env" as a standalone command (at start or after space, not inside words)
     for pattern in ENV_CMD_PATTERNS:
         if pattern in lower or lower.startswith(pattern.lstrip()):
+            return "Command attempts to read environment variables"
+
+    # Block Windows/PowerShell environment variable access
+    for pattern in WIN_ENV_PATTERNS:
+        if pattern in lower:
             return "Command attempts to read environment variables"
 
     # Block credential-adjacent keywords combined with env-reading commands
@@ -231,6 +244,9 @@ def _execute_tool(
             })
         except subprocess.TimeoutExpired:
             return json.dumps({"error": f"Command timed out after {timeout} seconds"})
+        except OSError as e:
+            # Windows subprocess errors (WinError 6/50) when stdout handles are invalid
+            return json.dumps({"error": f"Command failed (OS error): {e}"})
         except Exception as e:
             return json.dumps({"error": f"Command failed: {e}"})
 
