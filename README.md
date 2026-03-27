@@ -76,7 +76,7 @@ This is the core design decision. Stages split into two types:
 
 ## How It Really Works
 
-![Architecture Diagram](docs/architecture.svg)
+![Architecture Diagram](https://raw.githubusercontent.com/scottconverse/productteam/main/docs/architecture.svg)
 
 ### The Supervisor (`supervisor.py`)
 

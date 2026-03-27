@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.3.1] - 2026-03-26
+
+### Fixed
+- **Architecture SVG not rendering on PyPI** — README used a relative path (`docs/architecture.svg`) which doesn't resolve on PyPI. Changed to absolute GitHub raw URL.
+
 ## [2.3.0] - 2026-03-26
 
 ### Added
