@@ -1,3 +1,3 @@
 """ProductTeam: AI-powered product development pipeline using Claude skills."""
 
-__version__ = "2.3.1"
+__version__ = "2.3.2"

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "productteam"
-version = "2.3.1"
-description = "AI-powered product development pipeline using Claude skills"
+version = "2.3.2"
+description = "Your AI product team. Describe what you want. Wake up to shipping code."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"

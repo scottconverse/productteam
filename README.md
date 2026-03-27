@@ -1,52 +1,55 @@
 # ProductTeam
 
-**Turn a product concept into shipping code.**
+**Your AI product team. Describe what you want. Wake up to shipping code.**
 
-ProductTeam is a standalone AI-powered product development pipeline. You describe what you want to build. It writes the PRD, plans the sprints, builds the code, evaluates the results, writes the docs, and ships. Eight specialized agents, three approval gates, one CLI. No Claude Code required — works with Anthropic, OpenAI, Ollama (free/local), or Gemini.
+ProductTeam is an autonomous software delivery pipeline. You describe a product concept in plain English. Eight specialized AI agents write the PRD, plan the sprints, build the code, evaluate the results, write the docs, and ship — with three human approval gates where you confirm intent, scope, and readiness.
 
-## Install
+The builder never grades its own work. A separate, skeptical evaluator reads the code, runs the tests, and tries to break things. Code ships only when the evaluator says PASS — not when the builder says "done."
 
 ```bash
 pip install productteam
 ```
 
-Requires Python 3.11+.
+Works with **Anthropic Claude**, **OpenAI**, **Ollama** (free, local), **Google Gemini**, **LM Studio**, and **vLLM**. No vendor lock-in. No Claude Code required.
 
-## Quick Start
+![Tests](https://github.com/scottconverse/productteam/actions/workflows/test.yml/badge.svg)
+![PyPI](https://img.shields.io/pypi/v/productteam)
+![Python](https://img.shields.io/pypi/pyversions/productteam)
+![License](https://img.shields.io/pypi/l/productteam)
+
+---
+
+## Forge: Submit From Your Phone, Ship While You Sleep
+
+**This is the headline feature.** Start the Forge daemon on your workstation. Open the dashboard on your phone. Type a product idea. Hit "Forge it." Go to bed.
+
+The daemon runs the full pipeline headlessly — PRD, plan, build, evaluate, document. When a gate needs your approval, you get a Slack notification (or webhook). Tap approve on your phone. The pipeline continues. You wake up to a built, tested, documented codebase.
 
 ```bash
-# Initialize a project
-productteam init
+# Start the daemon + dashboard
+productteam forge --listen --dashboard --lan
 
-# Configure your provider
-productteam config set pipeline.provider anthropic
-# Set your API key
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Run the full pipeline
-productteam run "a CLI tool that estimates LLM API costs"
-
-# Or resume from where you left off
-productteam run
-
-# Recover a stuck pipeline (timeout, crash, etc.)
-productteam recover
-
-# Check your environment
-productteam doctor
+# Dashboard: http://localhost:7654
+# From phone: http://192.168.1.42:7654
 ```
+
+Three ways to submit ideas: your phone's browser, the CLI (`productteam forge "idea"`), or a GitHub Issue with the `productteam-forge` label.
+
+The dashboard is a zero-dependency single-page app served by Python's stdlib — no React, no build step, no npm. It shows job status, live log tailing, and approve/reject buttons for every gate.
+
+---
 
 ## The Pipeline
 
 ```
 You: "I want a tool that does X"
-  |
-  v
-PRD Writer  -->  Planner  -->  Builder <-> Evaluator  -->  Doc Writer  -->  Ship
-                                  (max 3 loops)
+  │
+  ▼
+PRD Writer  →  Planner  →  Builder ↔ Evaluator  →  Doc Writer  →  Ship
+                              (max 3 loops)
 ```
 
-**Three approval gates.** You stop three times:
+**Three approval gates** — you stop exactly three times:
 
 | Gate | When | You Decide |
 |------|------|-----------|
@@ -54,360 +57,43 @@ PRD Writer  -->  Planner  -->  Builder <-> Evaluator  -->  Doc Writer  -->  Ship
 | Sprint Approval | After sprints are planned | "Does this scope look right?" |
 | Ship Approval | After all evaluations pass | "Ready to push?" |
 
-Everything between gates runs automatically.
+Everything between gates runs autonomously.
+
+---
+
+## The Core Insight: Separate the Builder from the Judge
+
+Most AI coding tools let the agent build something and then declare it done. That's like letting a student grade their own exam.
+
+ProductTeam uses a GAN-inspired architecture: the **Builder** writes code and declares "ready for review." The **Evaluator** — a separate agent with a separate prompt, separate context, and a skeptical default posture — reads the source, runs the tests, verifies acceptance criteria, and tries to break things. It grades PASS, NEEDS_WORK, or FAIL. If NEEDS_WORK, findings route back to the Builder automatically. Maximum 3 loops. After loop 3, the plan is wrong — not the implementation.
+
+The Builder can never ship its own code. Only the Evaluator can.
+
+---
 
 ## Thinker/Doer Architecture
 
-This is the core design decision. Stages split into two types:
+Not all stages need the same capabilities. ProductTeam splits work into two cognitive modes:
 
-| Stage | Type | How It Runs |
-|-------|------|-------------|
-| PRD Writer | Thinker | Single LLM call, structured text output |
-| Design Evaluator | Thinker | Single LLM call, structured text output |
-| **Planner** | **Doer** | **Tool-use loop** (writes sprint YAML files to `.productteam/sprints/`) |
-| **Builder** | **Doer** | **Tool-use loop** (read/write files, run commands) |
-| **UI Builder** | **Doer** | **Tool-use loop** (read/write files, run commands) |
-| **Evaluator** | **Doer** | **Tool-use loop** (reads code, runs tests, grades) |
-| **Doc Writer** | **Doer** | **Tool-use loop** (reads source, writes docs) |
+**Thinker stages** (PRD Writer, Design Evaluator) take context in and produce a text artifact out. One LLM call. No filesystem access. Works with any provider.
 
-**Thinker stages** support all configured providers (Anthropic, OpenAI, Ollama, Gemini). Single `provider.complete()` call — context in, text artifact out.
+**Doer stages** (Planner, Builder, UI Builder, Evaluator, Doc Writer) use an agentic tool-use loop with exactly four tools: `read_file`, `write_file`, `run_bash`, `list_dir`. The LLM calls tools, the supervisor executes them, results go back to the LLM, repeat until the agent finishes.
 
-**Doer stages** run an agentic tool-use loop with exactly four tools: `read_file`, `write_file`, `run_bash`, `list_dir`. The LLM calls tools, the supervisor executes them, results go back to the LLM, repeat until the agent finishes. The Planner uses this to write sprint YAML files directly to disk. The Evaluator reads source files and runs tests. The Doc Writer reads code before writing documentation.
+This means thinker stages are cheap and fast. Doer stages are powerful but cost more tokens. The split is deliberate — it's the difference between a meeting and a work session.
 
-## How It Really Works
+---
 
-![Architecture Diagram](https://raw.githubusercontent.com/scottconverse/productteam/main/docs/architecture.svg)
+## The Doc Writer Reads Code. It Never Fabricates.
 
-### The Supervisor (`supervisor.py`)
+In 2026, hallucinated documentation is a real problem. ProductTeam's Doc Writer is a doer stage — it reads every source file via `read_file` before writing a single line of documentation. If a function doesn't exist in the code, it doesn't appear in the docs. READMEs, changelogs, and landing pages are generated from what the code actually does, not what the LLM imagines it does.
 
-The orchestrator. When you run `productteam run "concept"`, the Supervisor reads your config, loads pipeline state from `state.json`, and launches each stage in sequence. It enforces three approval gates (PRD, Sprint, Ship), manages the build-evaluate loop (max 3 iterations), detects stuck agents (timeout, infinite loops, max tool calls), and writes state on every change so you can resume with `productteam run`.
+---
 
-### The Tool Loop (`tool_loop.py`)
+## Use Only What You Need
 
-The agentic runtime for all doer stages (Builder, UI Builder, Evaluator, Doc Writer). Exactly four tools:
+You don't have to run the full pipeline. Each agent is a standalone markdown skill file. Drop in the ones you need, skip the ones you don't.
 
-- **`read_file`** — Read any file in the project. Path must be relative, no `..` traversal.
-- **`write_file`** — Write content to a file. Creates parent directories.
-- **`run_bash`** — Run a shell command with timeout. Blocks access to `.ssh/`, `.aws/`, credential paths.
-- **`list_dir`** — List directory contents with `[FILE]` and `[DIR]` prefixes.
-
-The loop calls the LLM, executes any tool calls, sends results back, and repeats until the LLM stops calling tools. Safety: path validation rejects traversal and absolute paths. Command validation blocks credential-adjacent paths. Loop detection catches identical tool+args called 3 times consecutively. Max 75 tool calls per run (configurable). Python is automatically added to the subprocess PATH on all platforms.
-
-### Forge (`forge/`)
-
-Three components for headless pipeline execution:
-
-- **Queue** (`queue.py`) — File-based at `~/.productteam/forge/queue/`. Each job is a directory with `job.json`, `gate.json`, and `log.txt`. Zero infrastructure.
-- **Daemon** (`daemon.py`) — Polls queue every 10 seconds. Creates a project, runs init, starts Supervisor with auto-approve. At gates, writes `gate.json` and sends webhook/Slack notifications.
-- **Dashboard** (`dashboard.py`) — Stdlib `http.server` at `http://0.0.0.0:7654` (LAN-accessible by default). Job table, live log tailing, approve/reject buttons, and a **submit form** — type an idea and hit "Forge it" from any device on your network. No framework, no build step. The CLI prints your local IP so you know the URL to use from your phone.
-
-### Provider Layer (`providers/`)
-
-Abstract `LLMProvider` with `complete()` (thinkers) and `complete_with_tools()` (doers). Four implementations: Anthropic (SDK), OpenAI-compatible (httpx), Ollama (native API), Gemini (REST). Factory function `get_provider(config)` reads `productteam.toml` and returns the right one. API keys from environment variables only.
-
-### Doctor (`doctor.py`)
-
-`productteam doctor` checks 8 things: Python version, package version, config validity, `.productteam/` directory, skills (all 8 present), provider + API key, forge queue health, disk space. Prints the thinker/doer note unconditionally. Exit code 1 on critical failures. `--json` for scripting, `--no-network` to skip API checks.
-
-### State (`state.json`)
-
-Written by the Supervisor on every state change. Records pipeline phase, completed stages, current sprint, loop iteration, timestamps. `productteam run` without a concept reads this and resumes. Passed sprints are skipped. `--rebuild` forces full rebuild. If a stage gets stuck (timeout, crash), `productteam recover` resets it to pending and re-enters the pipeline.
-
-## CLI Reference
-
-### `productteam init [DIRECTORY]`
-
-Initialize ProductTeam in a project directory.
-
-```
-Options:
-  --force, -f    Overwrite existing files
-
-Examples:
-  productteam init
-  productteam init ./my-project
-  productteam init --force
-```
-
-### `productteam run [CONCEPT] [OPTIONS]`
-
-Run the full product development pipeline.
-
-```
-Arguments:
-  CONCEPT    The product concept to build. Optional if resuming.
-
-Options:
-  --step        Run only a specific stage (prd|plan|build|evaluate|document|ship)
-  --sprint      Target a specific sprint (with --step build or evaluate)
-  --auto-approve   Skip interactive approval gates
-  --rebuild     Force rebuild even if a sprint has already passed
-  --dry-run     Show what would happen without calling the LLM
-  --dir, -d     Project directory (default: current directory)
-
-Examples:
-  productteam run "a CLI tool that estimates LLM API costs"
-  productteam run                          # resume from current state
-  productteam run --step prd               # rewrite the PRD only
-  productteam run --auto-approve           # headless / CI mode
-  productteam run --rebuild --sprint sprint-002
-```
-
-### `productteam status [DIRECTORY]`
-
-Show pipeline status for the current project.
-
-```
-Examples:
-  productteam status
-  productteam status ./my-project
-```
-
-### `productteam recover [OPTIONS]`
-
-Recover a stuck pipeline. Reads `state.json`, identifies stuck or running stages, resets them to pending, and re-runs from the stuck stage.
-
-```
-Options:
-  --yes, -y    Resume immediately without confirmation
-  --dir, -d    Project directory
-
-Examples:
-  productteam recover              # interactive: shows what's stuck, asks to confirm
-  productteam recover --yes        # non-interactive: reset and re-run immediately
-```
-
-The stuck stage is always re-executed (safe default for timeouts with incomplete output). If the stuck stage already produced valid artifacts and you don't want them overwritten, use `productteam run` instead — it skips stages marked complete. Use `productteam run --rebuild` for a full clean re-run.
-
-### `productteam doctor`
-
-Check ProductTeam environment and configuration.
-
-```
-Options:
-  --no-network   Skip API reachability checks
-  --json         Output as JSON for scripting
-  --dir, -d      Project directory
-
-Examples:
-  productteam doctor
-  productteam doctor --json
-  productteam doctor --no-network
-```
-
-### `productteam config`
-
-Show current productteam.toml settings.
-
-### `productteam config set KEY VALUE`
-
-Set a configuration value.
-
-```
-Examples:
-  productteam config set pipeline.provider openai
-  productteam config set pipeline.model claude-opus-4-6
-  productteam config set pipeline.max_loops 5
-  productteam config set gates.prd_approval false
-```
-
-### `productteam forge "CONCEPT"`
-
-Submit an idea to Forge. Returns a job ID.
-
-```
-Examples:
-  productteam forge "An app that tracks local ballot measures"
-```
-
-### `productteam forge --listen [--dashboard]`
-
-Start the Forge daemon. Watches for queued jobs and runs them headlessly.
-
-```
-Options:
-  --dashboard    Enable the status dashboard (default: http://0.0.0.0:7654)
-
-Examples:
-  productteam forge --listen
-  productteam forge --listen --dashboard
-
-The dashboard is accessible from any device on your local network. When it
-starts, the CLI prints both the localhost URL and your LAN IP:
-
-  Dashboard: http://localhost:7654
-  From phone: http://192.168.1.42:7654
-
-Open that URL on your phone to submit ideas, check status, and approve gates.
-```
-
-### `productteam forge status [JOB-ID]`
-
-Show all jobs or detailed status for one job.
-
-### `productteam forge approve JOB-ID`
-
-Approve a gate for a waiting job.
-
-### `productteam forge reject JOB-ID`
-
-Reject a gate and fail the job.
-
-### `productteam forge logs JOB-ID`
-
-Tail the log for a job.
-
-```
-Options:
-  --tail, -n    Number of lines (default: 50)
-```
-
-### `productteam test [OPTIONS]`
-
-Run the ProductTeam test suite.
-
-```
-Options:
-  --live              Run live integration tests (makes real API calls)
-  --provider, -p      LLM provider for live tests (anthropic|openai|ollama|gemini)
-  --model, -m         Model override for live tests
-  --verbose, -v       Verbose pytest output
-  --cov               Run with coverage reporting
-  -k EXPRESSION       pytest -k filter expression
-  --dir, -d           Project directory
-
-Examples:
-  productteam test                          # offline unit tests only
-  productteam test --live                   # live tests (costs money)
-  productteam test --live -p ollama         # live tests against local Ollama
-  productteam test -v --cov                 # verbose with coverage
-  productteam test -k "test_supervisor"     # run specific tests
-```
-
-Live mode shows a safety warning before running, displays your masked API key, and defaults to the cheapest available model (Haiku for Anthropic).
-
-## Forge
-
-Forge is how you use ProductTeam from your phone. Submit an idea from anywhere. It comes back a product.
-
-```bash
-# On your machine, start the daemon with the dashboard
-productteam forge --listen --dashboard
-# Dashboard: http://localhost:7654
-# From phone: http://192.168.1.42:7654
-```
-
-**Three ways to submit ideas:**
-
-1. **From your phone's browser** — Open `http://<your-ip>:7654`, type your idea in the submit form, hit "Forge it"
-2. **From the CLI** — `productteam forge "An app that tracks local ballot measures"`
-3. **From GitHub** — Create an issue with the `productteam-forge` label (requires `github_issues` queue backend)
-
-```bash
-# Check status from anywhere
-productteam forge status a1b2c3d4
-
-# Approve gates when notified (or use the dashboard buttons)
-productteam forge approve a1b2c3d4
-```
-
-**Queue backends:**
-- `file` (default) — zero infrastructure, queue lives at `~/.productteam/forge/queue/`
-- `github_issues` — uses GitHub Issues with the `productteam-forge` label
-
-**Notification backends:**
-- `none` (default)
-- `webhook` — POST JSON to any URL
-- `slack` — POST to a Slack webhook
-
-## Configuration
-
-All configuration lives in `productteam.toml`:
-
-```toml
-[project]
-name = "my-app"
-version = "0.1.0"
-
-[pipeline]
-provider = "anthropic"          # anthropic | openai | ollama | gemini
-model = "claude-sonnet-4-6"
-api_base = ""                   # for openai-compatible servers
-max_loops = 3                   # build-evaluate loop limit
-max_sprints = 8                 # max sprint contracts the Planner will produce
-require_evaluator = true
-require_design_review = true
-stage_timeout_seconds = 300     # thinker stages (PRD Writer, Design Evaluator)
-planner_timeout_seconds = 600   # Planner may write many sprint YAML files
-builder_timeout_seconds = 600   # doer stages (Builder, Evaluator, Doc Writer)
-builder_max_tool_calls = 75     # tool call limit per doer run
-
-# Increase these on slow connections or large products.
-# Claude Sonnet on a complex 8-sprint plan easily takes 5+ minutes.
-# Rule of thumb: builder_timeout_seconds = (expected_files * 30s).
-auto_approve = false            # skip approval gates
-
-[gates]
-prd_approval = true
-sprint_approval = true
-ship_approval = true
-
-[forge]
-enabled = false
-queue_backend = "file"          # file | github_issues
-notification_backend = "none"   # none | webhook | slack
-notification_url = ""
-status_host = "0.0.0.0"        # "127.0.0.1" for localhost only
-status_port = 7654
-github_repo = ""
-poll_interval_seconds = 10
-```
-
-> **Security note:** The dashboard binds to `0.0.0.0` by default — accessible to all devices on your LAN. Anyone on your network can view jobs, submit ideas, approve gates, and read log output. On shared or public networks, set `status_host = "127.0.0.1"` to restrict access to localhost only.
-
-## Multi-Provider Setup
-
-### Anthropic (default)
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-productteam config set pipeline.provider anthropic
-productteam config set pipeline.model claude-sonnet-4-6
-```
-
-### OpenAI
-
-```bash
-export OPENAI_API_KEY=sk-...
-productteam config set pipeline.provider openai
-productteam config set pipeline.model gpt-4o
-```
-
-### Ollama (local, no API key)
-
-```bash
-# Start Ollama first: ollama serve
-productteam config set pipeline.provider ollama
-productteam config set pipeline.model llama3
-```
-
-### Gemini
-
-```bash
-export GEMINI_API_KEY=...
-productteam config set pipeline.provider gemini
-productteam config set pipeline.model gemini-2.0-flash
-```
-
-### OpenAI-Compatible (LM Studio, vLLM, etc.)
-
-```bash
-productteam config set pipeline.provider openai
-productteam config set pipeline.model local-model
-productteam config set pipeline.api_base http://localhost:1234/v1
-```
-
-## The Team (8 Skills)
+Want just the Evaluator as a QA agent against your existing codebase? Use just that skill. Want the PRD Writer as a thinking tool without building anything? Use just that. Want the full pipeline? Run `productteam run`.
 
 | Skill | Role | What It Does |
 |-------|------|-------------|
@@ -419,6 +105,130 @@ productteam config set pipeline.api_base http://localhost:1234/v1
 | `evaluator-design` | Design Reviewer | Grades visual work on 4 dimensions |
 | `doc-writer` | Technical Writer | Writes README, docs, changelog from code |
 | `orchestrator` | Project Manager | Routes work, manages loops and gates |
+
+---
+
+## Quick Start
+
+```bash
+# Install
+pip install productteam
+
+# Set up your provider (pick one)
+export ANTHROPIC_API_KEY=sk-ant-...     # Anthropic
+export OPENAI_API_KEY=sk-...            # OpenAI
+# Or use Ollama (free, local): ollama serve
+
+# Initialize a project
+productteam init
+
+# Configure your provider
+productteam config set pipeline.provider anthropic
+# Or: openai, ollama, gemini
+
+# Run the full pipeline
+productteam run "a CLI tool that estimates LLM API costs"
+
+# Resume from where you left off
+productteam run
+
+# Recover a stuck pipeline
+productteam recover
+
+# Check your environment
+productteam doctor
+```
+
+---
+
+## Safety and Recovery
+
+ProductTeam runs LLM-generated shell commands on your machine. That's inherently risky. Here's how it's mitigated:
+
+**Path validation** — All file operations are locked to the project directory. No `../` traversal, no absolute paths.
+
+**Credential isolation** — Sensitive environment variables (`*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `AWS_*`) are stripped from the subprocess environment before commands run. The Builder cannot read your API keys.
+
+**Command filtering** — Known credential-adjacent paths (`.ssh/`, `.aws/`, `/proc/environ`) are blocked.
+
+**Loop detection** — If the LLM calls the same tool with identical arguments three consecutive times, the loop breaks automatically.
+
+**Tool call limits** — Maximum 75 tool calls per doer run (configurable). After that, the stage stops and escalates.
+
+**State persistence** — `state.json` is written on every state change. Crash at any point, resume with `productteam run`. If a stage gets stuck, `productteam recover` resets it and re-enters the pipeline.
+
+**Timeouts** — Every stage has a configurable timeout. Default: 300s for thinkers, 600s for doers.
+
+---
+
+## CLI Reference
+
+| Command | What It Does |
+|---------|-------------|
+| `productteam init` | Initialize a project directory |
+| `productteam run "concept"` | Run the full pipeline |
+| `productteam run` | Resume from current state |
+| `productteam run --auto-approve` | Headless / CI mode |
+| `productteam run --step prd` | Run only a specific stage |
+| `productteam recover` | Reset stuck stages and re-run |
+| `productteam status` | Show pipeline status |
+| `productteam doctor` | Check environment and config |
+| `productteam config set KEY VALUE` | Set configuration |
+| `productteam test` | Run the test suite |
+| `productteam test --live` | Run live integration tests |
+| `productteam forge "idea"` | Submit an idea to Forge |
+| `productteam forge --listen --dashboard` | Start the Forge daemon |
+| `productteam forge status [JOB-ID]` | Check job status |
+| `productteam forge approve JOB-ID` | Approve a gate |
+
+---
+
+## Configuration
+
+All configuration lives in `productteam.toml`:
+
+```toml
+[pipeline]
+provider = "anthropic"          # anthropic | openai | ollama | gemini
+model = "claude-sonnet-4-6"
+max_loops = 3                   # build-evaluate iterations (increase for complex features)
+max_sprints = 8                 # max sprint contracts
+builder_max_tool_calls = 75     # tool call limit per doer run
+auto_approve = false            # true for headless/CI mode
+
+[gates]
+prd_approval = true
+sprint_approval = true
+ship_approval = true
+
+[forge]
+queue_backend = "file"          # file | github_issues
+notification_backend = "none"   # none | webhook | slack
+status_host = "127.0.0.1"      # default: localhost only
+status_port = 7654
+```
+
+---
+
+## Who This Is For
+
+**Solo founders and indie hackers** who can describe a product but want structured, auditable AI execution instead of chatting with a coding assistant.
+
+**Small product teams** who want an opinionated delivery pipeline — PRD → Sprint → Build → Evaluate → Document → Ship — with human gates at every strategic decision point.
+
+**Anyone who's tired of AI coding tools that grade their own homework.** The evaluator loop is the difference between "the AI said it's done" and "the AI proved it works."
+
+---
+
+## What This Is Not
+
+This is not an IDE plugin. It's not autocomplete. It's not a chatbot you pair-program with.
+
+This is an autonomous pipeline that runs in the background and produces a project directory with code, tests, and documentation. You interact at three gates. Everything else is automatic.
+
+For small-to-medium projects (1-10 files per sprint, up to 8 sprints), it works well today. For large enterprise codebases with 30+ existing modules, you'll want to wait for the vector search integration in v3.
+
+---
 
 ## License
 

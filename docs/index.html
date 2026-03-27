@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ProductTeam — Turn a product concept into shipping code</title>
+<title>ProductTeam — Your AI product team. Describe what you want. Wake up to shipping code.</title>
+<meta name="description" content="Autonomous AI product development pipeline. PRD, plan, build, evaluate, document, ship. Eight agents, three human gates, any LLM provider.">
 <style>
   :root {
     --bg: #0e1117;
@@ -32,348 +33,239 @@
 
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
+  code { font-family: var(--font-mono); font-size: 13px; color: var(--green); }
 
-  .container {
-    max-width: 1080px;
-    margin: 0 auto;
-    padding: 0 24px;
-  }
+  .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
   /* ── Header ── */
-  header {
-    border-bottom: 1px solid var(--border);
-    padding: 16px 0;
-  }
-  header .container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .logo {
-    font-family: var(--font-mono);
-    font-size: 18px;
-    font-weight: 700;
-    color: #fff;
-  }
+  header { border-bottom: 1px solid var(--border); padding: 16px 0; }
+  header .container { display: flex; justify-content: space-between; align-items: center; }
+  .logo { font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: #fff; }
+  .header-links { display: flex; gap: 16px; align-items: center; }
   .header-link {
-    font-size: 14px;
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    padding: 6px 16px;
-    border-radius: 6px;
-    transition: border-color 0.15s;
+    font-size: 14px; color: var(--text-muted);
+    border: 1px solid var(--border); padding: 6px 16px;
+    border-radius: 6px; transition: border-color 0.15s;
   }
-  .header-link:hover {
-    border-color: var(--text-muted);
-    text-decoration: none;
-  }
+  .header-link:hover { border-color: var(--text-muted); text-decoration: none; }
+  .badge-link { border: none; padding: 0; }
+  .badge-link img { vertical-align: middle; }
 
   /* ── Hero ── */
-  .hero {
-    text-align: center;
-    padding: 96px 0 72px;
-  }
+  .hero { text-align: center; padding: 96px 0 72px; }
   .hero h1 {
     font-family: var(--font-mono);
-    font-size: clamp(36px, 6vw, 56px);
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: -1px;
-    margin-bottom: 16px;
+    font-size: clamp(32px, 5vw, 48px);
+    font-weight: 700; color: #fff;
+    letter-spacing: -1px; margin-bottom: 20px;
+    line-height: 1.2;
   }
   .hero .tagline {
-    font-size: clamp(18px, 3vw, 22px);
+    font-size: clamp(17px, 2.5vw, 20px);
     color: var(--text-muted);
-    max-width: 560px;
-    margin: 0 auto 40px;
+    max-width: 640px; margin: 0 auto 16px;
+  }
+  .hero .sub-tagline {
+    font-size: 15px;
+    color: var(--text-muted);
+    max-width: 560px; margin: 0 auto 40px;
   }
   .hero-code {
-    display: inline-block;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 14px 28px;
-    font-family: var(--font-mono);
-    font-size: 15px;
+    display: inline-block; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 28px; font-family: var(--font-mono); font-size: 15px;
     color: var(--green);
   }
   .hero-code .muted { color: var(--text-muted); }
-
-  /* ── Pipeline ── */
-  .pipeline-section {
-    padding: 72px 0;
-    border-bottom: 1px solid var(--border);
+  .provider-strip {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    justify-content: center; margin-top: 32px;
   }
+  .provider-pill {
+    font-family: var(--font-mono); font-size: 13px;
+    color: var(--text-muted); padding: 6px 14px;
+    border: 1px solid var(--border); border-radius: 20px;
+  }
+
+  /* ── Sections ── */
+  .section { padding: 80px 0; border-bottom: 1px solid var(--border); }
   .section-label {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--accent);
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    margin-bottom: 12px;
+    font-family: var(--font-mono); font-size: 13px;
+    color: var(--accent); text-transform: uppercase;
+    letter-spacing: 1.5px; margin-bottom: 12px;
   }
   .section-title {
-    font-size: 28px;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 8px;
+    font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 8px;
   }
   .section-desc {
-    color: var(--text-muted);
-    max-width: 640px;
+    color: var(--text-muted); max-width: 640px; margin-bottom: 40px;
+    font-size: 16px; line-height: 1.6;
+  }
+
+  /* ── Forge Hero (the headline feature) ── */
+  .forge-hero {
+    background: linear-gradient(135deg, #1a1f2e 0%, #161b22 100%);
+    border: 1px solid var(--yellow);
+    border-radius: 12px; padding: 48px 40px;
     margin-bottom: 40px;
   }
+  .forge-hero .section-label { color: var(--yellow); }
+  .forge-hero h2 {
+    font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 16px;
+  }
+  .forge-hero p {
+    color: var(--text); font-size: 16px; line-height: 1.7;
+    max-width: 640px; margin-bottom: 16px;
+  }
+  .forge-hero .muted-text { color: var(--text-muted); font-size: 14px; }
+  .forge-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px; margin-top: 32px;
+  }
+  .forge-step {
+    background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px;
+  }
+  .forge-step-num {
+    font-family: var(--font-mono); font-size: 13px;
+    font-weight: 700; color: var(--yellow); margin-bottom: 8px;
+  }
+  .forge-step-title {
+    font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px;
+  }
+  .forge-step-desc { font-size: 13px; color: var(--text-muted); }
 
+  /* ── Insight Box ── */
+  .insight-box {
+    background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 12px; padding: 40px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 40px;
+    align-items: start;
+  }
+  .insight-box h3 {
+    font-size: 22px; font-weight: 700; color: #fff; margin-bottom: 16px;
+  }
+  .insight-box p {
+    color: var(--text-muted); font-size: 15px; line-height: 1.7;
+  }
+  .vs-table {
+    width: 100%; border-collapse: collapse; font-size: 14px;
+  }
+  .vs-table th {
+    text-align: left; padding: 10px 12px;
+    border-bottom: 2px solid var(--border);
+    font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-muted); font-weight: 600;
+  }
+  .vs-table th:last-child { color: var(--accent); }
+  .vs-table td {
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  .vs-table td:last-child { color: var(--text); }
+
+  /* ── Pipeline ── */
   .pipeline-flow {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0;
-    align-items: center;
-    justify-content: center;
+    display: flex; flex-wrap: wrap; gap: 0;
+    align-items: center; justify-content: center;
   }
   .pipeline-step {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px 20px;
-    text-align: center;
-    min-width: 130px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 20px;
+    text-align: center; min-width: 120px;
   }
   .pipeline-step .step-name {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 600;
-    color: #fff;
+    font-family: var(--font-mono); font-size: 13px;
+    font-weight: 600; color: #fff;
   }
   .pipeline-step .step-role {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 4px;
+    font-size: 12px; color: var(--text-muted); margin-top: 4px;
   }
-  .pipeline-arrow {
-    font-size: 20px;
-    color: var(--border);
-    padding: 0 8px;
-  }
+  .pipeline-arrow { font-size: 20px; color: var(--border); padding: 0 8px; }
   .pipeline-loop {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    border: 1px dashed var(--yellow);
-    border-radius: 10px;
-    padding: 8px;
+    display: flex; align-items: center; gap: 0;
+    border: 1px dashed var(--yellow); border-radius: 10px; padding: 8px;
   }
   .pipeline-loop-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--yellow);
-    position: relative;
-    top: -30px;
-    margin-bottom: -18px;
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--yellow); position: relative;
+    top: -30px; margin-bottom: -18px;
   }
 
-  /* ── Team Grid ── */
-  .team-section {
-    padding: 72px 0;
-    border-bottom: 1px solid var(--border);
+  /* ── Gates ── */
+  .gates {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
   }
+  .gate-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px;
+  }
+  .gate-number {
+    font-family: var(--font-mono); font-size: 13px;
+    font-weight: 700; color: var(--yellow); margin-bottom: 8px;
+  }
+  .gate-title {
+    font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px;
+  }
+  .gate-desc { font-size: 14px; color: var(--text-muted); }
+
+  /* ── Team Grid ── */
   .team-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 16px;
   }
   .skill-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    transition: border-color 0.15s;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px; transition: border-color 0.15s;
   }
-  .skill-card:hover {
-    border-color: var(--text-muted);
-  }
+  .skill-card:hover { border-color: var(--text-muted); }
   .skill-card .card-name {
-    font-family: var(--font-mono);
-    font-size: 14px;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 4px;
+    font-family: var(--font-mono); font-size: 14px;
+    font-weight: 600; color: #fff; margin-bottom: 4px;
   }
   .skill-card .card-role {
-    font-size: 12px;
-    color: var(--accent);
-    margin-bottom: 10px;
+    font-size: 12px; color: var(--accent); margin-bottom: 10px;
   }
   .skill-card .card-desc {
-    font-size: 14px;
-    color: var(--text-muted);
-    line-height: 1.5;
+    font-size: 14px; color: var(--text-muted); line-height: 1.5;
   }
 
-  /* ── How It Works ── */
-  .how-section {
-    padding: 72px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .gates {
+  /* ── Guarantees ── */
+  .guarantee-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 16px;
-    margin-bottom: 48px;
   }
-  .gate-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
+  .guarantee-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 24px;
   }
-  .gate-number {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--yellow);
-    margin-bottom: 8px;
+  .guarantee-card h4 {
+    font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 8px;
   }
-  .gate-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 6px;
-  }
-  .gate-desc {
-    font-size: 14px;
-    color: var(--text-muted);
-  }
-
-  .loop-explanation {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 24px;
-  }
-  .loop-explanation h3 {
-    font-size: 18px;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 12px;
-  }
-  .loop-explanation ul {
-    list-style: none;
-    padding: 0;
-  }
-  .loop-explanation li {
-    font-size: 14px;
-    color: var(--text-muted);
-    padding: 6px 0;
-    padding-left: 20px;
-    position: relative;
-  }
-  .loop-explanation li::before {
-    content: "\2192";
-    position: absolute;
-    left: 0;
-    color: var(--accent);
-  }
-
-  /* ── Comparison ── */
-  .compare-section {
-    padding: 72px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .compare-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-  }
-  .compare-table th {
-    text-align: left;
-    padding: 12px 16px;
-    border-bottom: 2px solid var(--border);
-    color: var(--text-muted);
-    font-weight: 600;
-    font-size: 13px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .compare-table th:last-child {
-    color: var(--accent);
-  }
-  .compare-table td {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    color: var(--text-muted);
-  }
-  .compare-table td:last-child {
-    color: var(--text);
-  }
-
-  /* ── Results ── */
-  .results-section {
-    padding: 72px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-  }
-  .stat-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 24px;
-    text-align: center;
-  }
-  .stat-number {
-    font-family: var(--font-mono);
-    font-size: 36px;
-    font-weight: 700;
-    color: #fff;
-  }
-  .stat-label {
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-top: 4px;
+  .guarantee-card p {
+    font-size: 14px; color: var(--text-muted); line-height: 1.6;
   }
 
   /* ── Install ── */
-  .install-section {
-    padding: 72px 0;
-    border-bottom: 1px solid var(--border);
-  }
   .install-block {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px 24px;
-    font-family: var(--font-mono);
-    font-size: 14px;
-    color: var(--text);
-    overflow-x: auto;
-    margin-bottom: 16px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px 24px;
+    font-family: var(--font-mono); font-size: 14px;
+    color: var(--text); overflow-x: auto; margin-bottom: 16px;
   }
-  .install-block .comment {
-    color: var(--text-muted);
-  }
-  .install-block .cmd {
-    color: var(--green);
-  }
+  .install-block .comment { color: var(--text-muted); }
+  .install-block .cmd { color: var(--green); }
 
   /* ── Footer ── */
-  footer {
-    padding: 40px 0;
-    text-align: center;
-  }
-  footer p {
-    font-size: 14px;
-    color: var(--text-muted);
-  }
-  footer a {
-    color: var(--text-muted);
-  }
-  footer a:hover {
-    color: var(--accent);
-  }
+  footer { padding: 40px 0; text-align: center; }
+  footer p { font-size: 14px; color: var(--text-muted); }
+  footer a { color: var(--text-muted); }
+  footer a:hover { color: var(--accent); }
 
   /* ── Responsive ── */
   @media (max-width: 768px) {
@@ -382,11 +274,11 @@
     .pipeline-arrow { transform: rotate(90deg); padding: 4px 0; }
     .pipeline-loop { flex-direction: column; }
     .pipeline-loop-label { top: -22px; margin-bottom: -12px; }
+    .insight-box { grid-template-columns: 1fr; }
     .gates { grid-template-columns: 1fr; }
     .team-grid { grid-template-columns: 1fr; }
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .compare-table { font-size: 13px; }
-    .compare-table th, .compare-table td { padding: 10px 12px; }
+    .forge-steps { grid-template-columns: 1fr; }
+    .forge-hero { padding: 32px 24px; }
   }
 </style>
 </head>
@@ -396,32 +288,114 @@
 <header>
   <div class="container">
     <span class="logo">ProductTeam</span>
-    <a href="https://github.com/scottconverse/productteam" class="header-link">GitHub</a>
+    <div class="header-links">
+      <a href="https://pypi.org/project/productteam/" class="badge-link"><img src="https://img.shields.io/pypi/v/productteam" alt="PyPI version"></a>
+      <a href="https://github.com/scottconverse/productteam/actions" class="badge-link"><img src="https://github.com/scottconverse/productteam/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
+      <a href="https://github.com/scottconverse/productteam" class="header-link">GitHub</a>
+    </div>
   </div>
 </header>
 
 <!-- Hero -->
 <section class="hero">
   <div class="container">
-    <h1>ProductTeam</h1>
-    <p class="tagline">Turn a product concept into shipping code. PRD, plan, build, evaluate, document, ship.</p>
-    <p style="display:inline-block;background:var(--surface);border:1px solid var(--accent);border-radius:20px;padding:6px 18px;font-family:var(--font-mono);font-size:13px;color:var(--accent);margin-bottom:24px;">Standalone CLI &middot; Any LLM Provider</p>
-    <p style="font-size:14px;color:var(--text-muted);max-width:520px;margin:0 auto 32px;">ProductTeam is a standalone Python CLI. No Claude Code required. Works with Anthropic, OpenAI, Ollama (free, local), or Gemini. Just pip install and run.</p>
+    <h1>Your AI product team.<br>Describe what you want.<br>Wake up to shipping code.</h1>
+    <p class="tagline">Eight specialized agents. Three human approval gates. One CLI. The builder never grades its own work — a separate, skeptical evaluator does.</p>
+    <p class="sub-tagline">Standalone Python CLI. Any LLM provider. No Claude Code required.</p>
     <div class="hero-code">
       <span class="muted">$</span> <span class="cmd">pip install productteam</span>
     </div>
     <div class="hero-code" style="margin-top:8px;">
       <span class="muted">$</span> productteam run <span class="cmd">"I want a CLI tool that estimates API costs"</span>
     </div>
+    <div class="provider-strip">
+      <span class="provider-pill">Anthropic Claude</span>
+      <span class="provider-pill">OpenAI GPT-4o</span>
+      <span class="provider-pill">Ollama (free, local)</span>
+      <span class="provider-pill">Google Gemini</span>
+      <span class="provider-pill">LM Studio</span>
+      <span class="provider-pill">vLLM</span>
+    </div>
+  </div>
+</section>
+
+<!-- FORGE — THE HEADLINE FEATURE -->
+<section class="section">
+  <div class="container">
+    <div class="forge-hero">
+      <p class="section-label">The Headline Feature</p>
+      <h2>Forge: Phone to Product</h2>
+      <p>Start the daemon on your workstation. Open the dashboard on your phone. Type a product idea. Hit "Forge it." Go to bed. The pipeline runs headlessly — PRD, plan, build, evaluate, document. When a gate needs your approval, you get a Slack notification. Tap approve. Wake up to a built, tested, documented codebase.</p>
+      <p class="muted-text">Zero infrastructure. File-based queue. Python stdlib HTTP server. No React, no build step, no npm.</p>
+      <div class="install-block" style="margin-top:24px;margin-bottom:0;background:rgba(0,0,0,0.3);">
+        <span class="comment"># Start the daemon + dashboard (localhost by default)</span><br>
+        <span class="cmd">productteam forge --listen --dashboard</span><br><br>
+        <span class="comment"># Or expose to your LAN for phone access</span><br>
+        <span class="cmd">productteam forge --listen --dashboard --lan</span><br>
+        <span class="comment"># Dashboard: http://localhost:7654</span><br>
+        <span class="comment"># From phone: http://192.168.1.42:7654</span>
+      </div>
+      <div class="forge-steps">
+        <div class="forge-step">
+          <div class="forge-step-num">1</div>
+          <div class="forge-step-title">Submit</div>
+          <div class="forge-step-desc">From your phone's browser, CLI, or GitHub Issue</div>
+        </div>
+        <div class="forge-step">
+          <div class="forge-step-num">2</div>
+          <div class="forge-step-title">Daemon runs</div>
+          <div class="forge-step-desc">PRD, plan, build, evaluate, document — fully headless</div>
+        </div>
+        <div class="forge-step">
+          <div class="forge-step-num">3</div>
+          <div class="forge-step-title">Approve gates</div>
+          <div class="forge-step-desc">Notified via Slack or webhook. Approve from your phone.</div>
+        </div>
+        <div class="forge-step">
+          <div class="forge-step-num">4</div>
+          <div class="forge-step-title">Product ready</div>
+          <div class="forge-step-desc">Code written, tests passing, docs generated. Ship it.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- The Core Insight -->
+<section class="section">
+  <div class="container">
+    <div class="insight-box">
+      <div>
+        <h3>The builder never grades its own work.</h3>
+        <p style="margin-bottom:16px;">Most AI coding tools let a single agent build something and then declare it done. That's a student grading their own exam.</p>
+        <p style="margin-bottom:16px;">ProductTeam separates builder from judge. The Builder writes code and says "ready for review." The Evaluator — a separate agent, separate prompt, skeptical by default — reads the source, runs the tests, tries to break things. It grades PASS, NEEDS_WORK, or FAIL.</p>
+        <p>If NEEDS_WORK, findings route back to the Builder automatically. Maximum 3 loops. After loop 3, the plan is wrong — not the implementation. The Builder can never ship its own code.</p>
+      </div>
+      <div>
+        <table class="vs-table">
+          <thead>
+            <tr><th>Other AI Tools</th><th>ProductTeam</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Agent self-evaluates</td><td>Separate skeptical judge</td></tr>
+            <tr><td>"Done" when builder says so</td><td>"Done" only when Evaluator grades PASS</td></tr>
+            <tr><td>State in conversation memory</td><td>State in files that persist across sessions</td></tr>
+            <tr><td>All agents or nothing</td><td>Drop in only the skills you need</td></tr>
+            <tr><td>Complex setup</td><td>pip install and run</td></tr>
+            <tr><td>One quality standard</td><td>Code evaluator + design evaluator</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- Pipeline -->
-<section class="pipeline-section">
+<section class="section">
   <div class="container">
     <p class="section-label">The Pipeline</p>
     <h2 class="section-title">From idea to shipped product</h2>
-    <p class="section-desc">Eight specialized agents pass structured artifacts through a pipeline with three human approval gates and a build-evaluate loop that catches bugs the builder misses.</p>
+    <p class="section-desc">Eight specialized agents pass structured artifacts through a pipeline with three human approval gates.</p>
     <div class="pipeline-flow">
       <div class="pipeline-step">
         <div class="step-name">PRD Writer</div>
@@ -433,7 +407,7 @@
         <div class="step-role">Tech Lead</div>
       </div>
       <span class="pipeline-arrow">&rarr;</span>
-      <div style="display: flex; flex-direction: column; align-items: center;">
+      <div style="display:flex;flex-direction:column;align-items:center;">
         <span class="pipeline-loop-label">max 3 loops</span>
         <div class="pipeline-loop">
           <div class="pipeline-step">
@@ -453,55 +427,116 @@
         <div class="step-role">Technical Writer</div>
       </div>
       <span class="pipeline-arrow">&rarr;</span>
-      <div class="pipeline-step" style="border-color: var(--green);">
-        <div class="step-name" style="color: var(--green);">Ship</div>
+      <div class="pipeline-step" style="border-color:var(--green);">
+        <div class="step-name" style="color:var(--green);">Ship</div>
         <div class="step-role">Done</div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Team Grid -->
-<section class="team-section">
+<!-- Three Gates -->
+<section class="section">
+  <div class="container">
+    <p class="section-label">Human in the Loop</p>
+    <h2 class="section-title">Three approval gates</h2>
+    <p class="section-desc">The pipeline runs automatically between gates. You stop exactly three times to confirm intent, scope, and readiness to ship.</p>
+    <div class="gates">
+      <div class="gate-card">
+        <div class="gate-number">Gate 1</div>
+        <div class="gate-title">PRD Approval</div>
+        <div class="gate-desc">"Does this capture your intent?" Review the PRD before planning begins.</div>
+      </div>
+      <div class="gate-card">
+        <div class="gate-number">Gate 2</div>
+        <div class="gate-title">Sprint Approval</div>
+        <div class="gate-desc">"Does this scope look right?" Review sprint contracts and acceptance criteria.</div>
+      </div>
+      <div class="gate-card">
+        <div class="gate-number">Gate 3</div>
+        <div class="gate-title">Ship Approval</div>
+        <div class="gate-desc">"Ready to commit/push/publish?" All evaluations passed. Review and ship.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Guarantees -->
+<section class="section">
+  <div class="container">
+    <p class="section-label">Commitments</p>
+    <h2 class="section-title">What we guarantee</h2>
+    <p class="section-desc">These aren't marketing claims. They're architectural constraints enforced by the code.</p>
+    <div class="guarantee-grid">
+      <div class="guarantee-card">
+        <h4>The Doc Writer reads code. It never fabricates.</h4>
+        <p>The Doc Writer is a doer stage — it reads every source file via <code>read_file</code> before writing documentation. If a function doesn't exist in the code, it doesn't appear in the docs. No hallucinated APIs. No invented features.</p>
+      </div>
+      <div class="guarantee-card">
+        <h4>The Builder cannot ship its own code.</h4>
+        <p>Only the Evaluator can grade a sprint PASS. The Builder declares "ready for review" — never "done." This is the GAN-inspired insight: separate the generator from the discriminator.</p>
+      </div>
+      <div class="guarantee-card">
+        <h4>State survives crashes.</h4>
+        <p><code>state.json</code> is written on every state change. Crash, timeout, or Ctrl+C at any point — <code>productteam run</code> resumes from exactly where you left off. Passed sprints are skipped.</p>
+      </div>
+      <div class="guarantee-card">
+        <h4>Your API keys are never exposed to build commands.</h4>
+        <p>Sensitive environment variables (<code>*_KEY</code>, <code>*_TOKEN</code>, <code>*_SECRET</code>) are stripped from the subprocess environment before <code>run_bash</code> executes. The Builder writes Python and runs tests — it doesn't need your credentials.</p>
+      </div>
+      <div class="guarantee-card">
+        <h4>Four tools. No more.</h4>
+        <p>Doer agents get <code>read_file</code>, <code>write_file</code>, <code>run_bash</code>, <code>list_dir</code>. A narrow tool surface means more predictable behavior and a smaller attack surface than frameworks with dozens of tools.</p>
+      </div>
+      <div class="guarantee-card">
+        <h4>Use only what you need.</h4>
+        <p>Each agent is a standalone markdown skill file. Want just the Evaluator as a QA agent? Just the PRD Writer as a thinking tool? Drop in the skills you need. Skip the rest.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- The Team -->
+<section class="section">
   <div class="container">
     <p class="section-label">The Team</p>
-    <h2 class="section-title">8 specialized skills</h2>
-    <p class="section-desc">Each skill is a markdown file. Drop in the ones you need, skip the ones you don't.</p>
+    <h2 class="section-title">8 specialized agents</h2>
+    <p class="section-desc">Each skill is a markdown file. Readable, editable, replaceable.</p>
     <div class="team-grid">
       <div class="skill-card">
         <div class="card-name">prd-writer</div>
         <div class="card-role">Product Manager</div>
-        <div class="card-desc">Takes a concept, asks clarifying questions with sensible defaults, researches competitors, produces a structured PRD.</div>
+        <div class="card-desc">Takes a concept, applies sensible defaults, produces a structured PRD with requirements, constraints, and success criteria.</div>
       </div>
       <div class="skill-card">
         <div class="card-name">planner</div>
         <div class="card-role">Tech Lead</div>
-        <div class="card-desc">Reads PRD, decomposes into sprint contracts with testable acceptance criteria. Never writes code.</div>
+        <div class="card-desc">Reads PRD, decomposes into sprint contracts with testable acceptance criteria. Writes sprint YAML files to disk. Never writes code.</div>
       </div>
       <div class="skill-card">
         <div class="card-name">builder</div>
         <div class="card-role">Engineer</div>
-        <div class="card-desc">Implements sprint contracts with production-quality code and tests. Declares "ready for review" -- never "done."</div>
+        <div class="card-desc">Implements sprint contracts with production-quality code and tests. Declares "ready for review" — never "done."</div>
       </div>
       <div class="skill-card">
         <div class="card-name">ui-builder</div>
         <div class="card-role">Frontend Engineer</div>
-        <div class="card-desc">Specialized builder for visual work. Landing pages, dashboards, web UIs. Dark theme, responsive, WCAG AA.</div>
+        <div class="card-desc">Specialized builder for visual work. Landing pages, dashboards, web UIs. Dark theme, responsive, WCAG AA by default.</div>
       </div>
       <div class="skill-card">
         <div class="card-name">evaluator</div>
         <div class="card-role">QA Engineer</div>
-        <div class="card-desc">Skeptical by default. Runs tests, verifies acceptance criteria, tries to break things. Grades PASS / NEEDS_WORK / FAIL.</div>
+        <div class="card-desc">Skeptical by default. Reads source, runs tests, verifies acceptance criteria, tries to break things. PASS / NEEDS_WORK / FAIL.</div>
       </div>
       <div class="skill-card">
         <div class="card-name">evaluator-design</div>
         <div class="card-role">Design Reviewer</div>
-        <div class="card-desc">Grades visual artifacts on four criteria: Coherence, Originality, Craft, and Functionality. 1-5 scale.</div>
+        <div class="card-desc">Grades visual artifacts on Coherence, Originality, Craft, and Functionality. 1-5 scale. 4.0+ to pass.</div>
       </div>
       <div class="skill-card">
         <div class="card-name">doc-writer</div>
         <div class="card-role">Technical Writer</div>
-        <div class="card-desc">Reads code, never fabricates features. Produces README, landing page, PDF, changelog with real data only.</div>
+        <div class="card-desc">Reads every source file. Produces README, landing page, changelog with real data only. Never fabricates features.</div>
       </div>
       <div class="skill-card">
         <div class="card-name">orchestrator</div>
@@ -512,258 +547,27 @@
   </div>
 </section>
 
-<!-- How It Works -->
-<section class="how-section">
-  <div class="container">
-    <p class="section-label">How It Works</p>
-    <h2 class="section-title">Three approval gates</h2>
-    <p class="section-desc">The pipeline runs automatically between gates. You only stop three times to confirm intent, scope, and readiness to ship.</p>
-    <div class="gates">
-      <div class="gate-card">
-        <div class="gate-number">Gate 1</div>
-        <div class="gate-title">PRD Approval</div>
-        <div class="gate-desc">"Does this capture your intent?" Review the PRD before planning begins. Revise until it matches your vision.</div>
-      </div>
-      <div class="gate-card">
-        <div class="gate-number">Gate 2</div>
-        <div class="gate-title">Sprint Approval</div>
-        <div class="gate-desc">"Does this scope look right?" Review sprint contracts and acceptance criteria before building starts.</div>
-      </div>
-      <div class="gate-card">
-        <div class="gate-number">Gate 3</div>
-        <div class="gate-title">Ship Approval</div>
-        <div class="gate-desc">"Ready to commit/push/publish?" All evaluations have passed. Review the final state before shipping.</div>
-      </div>
-    </div>
-    <div class="loop-explanation">
-      <h3>The Build-Evaluate Loop</h3>
-      <ul>
-        <li>Builder implements the sprint contract, then declares "ready for review"</li>
-        <li>Evaluator runs tests, verifies acceptance criteria, tries to break things</li>
-        <li>PASS: sprint is complete, move to documentation</li>
-        <li>NEEDS_WORK: automatically routes back to Builder with findings</li>
-        <li>FAIL: escalate to human immediately</li>
-        <li>Maximum 3 loops. After loop 3, the plan is wrong, not the implementation</li>
-      </ul>
-    </div>
-  </div>
-</section>
-
-<!-- Architecture -->
-<section class="pipeline-section">
-  <div class="container">
-    <p class="section-label">Architecture</p>
-    <h2 class="section-title">How it really works</h2>
-    <p class="section-desc">Six layers, from your command to files on disk. Every component has one job.</p>
-
-    <!-- SVG Diagram -->
-    <div style="margin:32px 0;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
-      <img src="architecture.svg" alt="ProductTeam v2.0 Architecture Diagram" style="width:100%;display:block;"/>
-    </div>
-
-    <!-- Component descriptions -->
-    <div style="display:grid;grid-template-columns:1fr;gap:24px;margin-top:32px;">
-
-      <!-- Supervisor -->
-      <div style="background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:24px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent);">supervisor.py</span>
-          <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Orchestration</span>
-        </div>
-        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">The brain of the system. When you run <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam run "concept"</code>, the Supervisor takes over. It reads your config, loads pipeline state from <code style="color:var(--green);font-family:var(--mono);font-size:13px;">state.json</code>, and launches each stage in sequence.</p>
-        <p style="color:var(--muted);font-size:13px;line-height:1.6;">It enforces three approval gates (PRD, Sprint, Ship) where it pauses for your input. Between gates, it runs autonomously. It manages the build-evaluate loop: Builder produces code, Evaluator grades it, and if the verdict is NEEDS_WORK, the Supervisor feeds the feedback back to the Builder and loops (max 3 times). If an agent gets stuck (timeout, infinite loop, max tool calls), the Supervisor detects it and escalates to you with full context. On every state change, it writes <code style="color:var(--green);font-family:var(--mono);font-size:13px;">state.json</code> so you can resume later with just <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam run</code>. If a stage gets stuck, <code style="color:var(--green);font-family:var(--mono);font-size:13px;">productteam recover</code> resets it and re-enters the pipeline.</p>
-      </div>
-
-      <!-- Thinker/Doer split -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-            <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent);">Thinker Stages</span>
-            <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Any Provider</span>
-          </div>
-          <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">PRD Writer and Design Evaluator are <strong>thinkers</strong>. They take context in and produce a text artifact out. One LLM call: system prompt (the SKILL.md file), user message (the context), response (the artifact).</p>
-          <p style="color:var(--muted);font-size:13px;line-height:1.6;">Because they don't need to touch the filesystem, they work with any provider &mdash; Anthropic, OpenAI, Ollama, Gemini. The Supervisor calls <code style="color:var(--green);font-family:var(--mono);font-size:13px;">provider.complete(system, messages)</code> and writes the result to <code style="color:var(--green);font-family:var(--mono);font-size:13px;">.productteam/</code>.</p>
-        </div>
-
-        <div style="background:var(--surface);border:1px solid var(--yellow);border-radius:8px;padding:24px;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-            <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--yellow);">Doer Stages</span>
-            <span style="font-size:12px;color:var(--yellow);border:1px solid var(--yellow);padding:2px 8px;border-radius:12px;">Tool-Use Loop</span>
-          </div>
-          <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">Planner, Builder, UI Builder, Evaluator, and Doc Writer are <strong>doers</strong>. They need to read files, write code, run tests, and react to results. A single LLM call can't do that. They use an agentic tool-use loop.</p>
-          <p style="color:var(--muted);font-size:13px;line-height:1.6;">The loop: call LLM with 4 tools (read_file, write_file, run_bash, list_dir). The Planner writes sprint YAML files directly to <code style="color:var(--green);font-family:var(--mono);font-size:13px;">.productteam/sprints/</code>. The Evaluator reads source files and runs the test suite. The Doc Writer reads every module before writing documentation. Path validation blocks traversal attacks. Command validation blocks credential access. Loop detection catches the LLM calling the same tool with identical args 3 times.</p>
-        </div>
-      </div>
-
-      <!-- Tool Loop -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);">tool_loop.py</span>
-          <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Agentic Runtime</span>
-        </div>
-        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:16px;">The tool loop is deliberately minimal. Four tools, no more:</p>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;">
-            <div style="font-family:var(--mono);font-size:13px;color:var(--green);font-weight:600;">read_file</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Read any file in the project directory. Path must be relative, no traversal.</div>
-          </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;">
-            <div style="font-family:var(--mono);font-size:13px;color:var(--green);font-weight:600;">write_file</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Write content to a file. Creates parent directories. Same path restrictions.</div>
-          </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;">
-            <div style="font-family:var(--mono);font-size:13px;color:var(--green);font-weight:600;">run_bash</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Run a shell command. Timeout per call. Blocks .ssh, .aws, credential paths.</div>
-          </div>
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;text-align:center;">
-            <div style="font-family:var(--mono);font-size:13px;color:var(--green);font-weight:600;">list_dir</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px;">List files and directories. Shows [FILE] and [DIR] prefixes.</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Forge -->
-      <div style="background:var(--surface);border:1px solid var(--yellow);border-radius:8px;padding:24px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--yellow);">forge/</span>
-          <span style="font-size:12px;color:var(--yellow);border:1px solid var(--yellow);padding:2px 8px;border-radius:12px;">Phone to Product</span>
-        </div>
-        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">Forge is three components working together. The <strong>queue</strong> (<code style="font-family:var(--mono);font-size:13px;color:var(--green);">queue.py</code>) is file-based &mdash; each job is a directory with job.json, gate.json, and log.txt. Zero infrastructure, no database. The <strong>daemon</strong> (<code style="font-family:var(--mono);font-size:13px;color:var(--green);">daemon.py</code>) polls the queue every 10 seconds. When it finds a new job, it creates a project directory, runs init, and starts the Supervisor with auto-approve. At gates, it writes gate.json and sends a webhook notification.</p>
-        <p style="color:var(--muted);font-size:13px;line-height:1.6;">The <strong>dashboard</strong> (<code style="font-family:var(--mono);font-size:13px;color:var(--green);">dashboard.py</code>) is a single-page app served by Python's stdlib http.server at <code style="font-family:var(--mono);font-size:13px;color:var(--green);">0.0.0.0:7654</code> &mdash; accessible from any device on your local network. It shows all jobs, live log tailing, approve/reject buttons, and a <strong>submit form</strong>. Open the dashboard on your phone, type a product idea, hit &ldquo;Forge it,&rdquo; and the daemon picks it up. No CLI needed. No framework, no build step.</p>
-      </div>
-
-      <!-- Provider Layer -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);">providers/</span>
-          <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">LLM Abstraction</span>
-        </div>
-        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;">Every LLM call goes through the provider layer. An abstract <code style="font-family:var(--mono);font-size:13px;color:var(--green);">LLMProvider</code> base class defines two methods: <code style="font-family:var(--mono);font-size:13px;color:var(--green);">complete()</code> for thinker stages and <code style="font-family:var(--mono);font-size:13px;color:var(--green);">complete_with_tools()</code> for doer stages. Four implementations: Anthropic (SDK), OpenAI-compatible (httpx), Ollama (native API), Gemini (REST).</p>
-        <p style="color:var(--muted);font-size:13px;line-height:1.6;">The factory function <code style="font-family:var(--mono);font-size:13px;color:var(--green);">get_provider(config)</code> reads your productteam.toml and returns the right provider. API keys come from environment variables only &mdash; never from config files, never logged, never in state.json.</p>
-      </div>
-
-      <!-- Doctor -->
-      <div style="background:var(--surface);border:1px solid var(--green);border-radius:8px;padding:24px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:var(--green);">doctor.py</span>
-          <span style="font-size:12px;color:var(--green);border:1px solid var(--green);padding:2px 8px;border-radius:12px;">Diagnostics</span>
-        </div>
-        <p style="color:var(--text);font-size:14px;line-height:1.6;margin-bottom:12px;"><code style="font-family:var(--mono);font-size:13px;color:var(--green);">productteam doctor</code> checks 8 things: Python version, package version, productteam.toml validity, .productteam/ directory, skills directory (all 8 present), provider configuration and API key, forge queue health, and disk space. It prints the thinker/doer note unconditionally &mdash; that's the thing users hit first.</p>
-        <p style="color:var(--muted);font-size:13px;line-height:1.6;">Exit code 0 if everything passes. Exit code 1 if anything critical is wrong. <code style="font-family:var(--mono);font-size:13px;color:var(--green);">--json</code> flag outputs machine-readable results for scripting. <code style="font-family:var(--mono);font-size:13px;color:var(--green);">--no-network</code> skips API reachability checks.</p>
-      </div>
-
-      <!-- State -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:24px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:#e6edf3;">state.json</span>
-          <span style="font-size:12px;color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:12px;">Pipeline State</span>
-        </div>
-        <p style="color:var(--text);font-size:14px;line-height:1.6;">The Supervisor writes state.json on every state change. It records which stages are complete, which sprint is being built, what loop iteration the evaluator is on, and when things last changed. When you run <code style="font-family:var(--mono);font-size:13px;color:var(--green);">productteam run</code> without a concept, the Supervisor reads state.json and resumes from exactly where it left off. Sprints that already passed evaluation are skipped. The <code style="font-family:var(--mono);font-size:13px;color:var(--green);">--rebuild</code> flag forces a full rebuild.</p>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-<!-- Comparison -->
-<section class="compare-section">
-  <div class="container">
-    <p class="section-label">Why This Approach</p>
-    <h2 class="section-title">What makes this different</h2>
-    <p class="section-desc">The core insight: separate the builder from the judge.</p>
-    <table class="compare-table">
-      <thead>
-        <tr>
-          <th>Other Multi-Agent Systems</th>
-          <th>ProductTeam</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Agents self-evaluate</td>
-          <td>Separate skeptical judge that assumes code is broken</td>
-        </tr>
-        <tr>
-          <td>"Done" when builder says so</td>
-          <td>"Done" only when Evaluator grades PASS</td>
-        </tr>
-        <tr>
-          <td>State in conversation memory</td>
-          <td>State in structured YAML files that persist across sessions</td>
-        </tr>
-        <tr>
-          <td>All agents or nothing</td>
-          <td>Drop in only the skills you need</td>
-        </tr>
-        <tr>
-          <td>Complex setup (databases, hooks, scripts)</td>
-          <td>Just markdown files in a directory</td>
-        </tr>
-        <tr>
-          <td>Single quality standard</td>
-          <td>Two evaluators: code quality and visual quality</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<!-- Results -->
-<section class="results-section">
-  <div class="container">
-    <p class="section-label">Proven Results</p>
-    <h2 class="section-title">Tested on prompttools</h2>
-    <p class="section-desc">Built and verified across 7 Python packages in a real monorepo.</p>
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-number">755</div>
-        <div class="stat-label">tests written and verified</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">7</div>
-        <div class="stat-label">bugs caught by Evaluators</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">6</div>
-        <div class="stat-label">packages passed review</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-number">3</div>
-        <div class="stat-label">max loops per sprint</div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- Getting Started -->
-<section class="install-section">
+<section class="section">
   <div class="container">
     <p class="section-label">60 Seconds</p>
-    <h2 class="section-title">Getting Started</h2>
+    <h2 class="section-title">Getting started</h2>
     <p class="section-desc">Install, init, run. Three commands to your first pipeline.</p>
     <div class="install-block">
-      <span class="comment"># Install</span><br>
+      <span class="comment"># Install (Python 3.11+)</span><br>
       <span class="cmd">pip install productteam</span><br><br>
-      <span class="comment"># Set up your provider</span><br>
-      <span class="cmd">export ANTHROPIC_API_KEY=sk-ant-...</span><br><br>
+      <span class="comment"># Set up your provider (pick one)</span><br>
+      <span class="cmd">export ANTHROPIC_API_KEY=sk-ant-...</span><br>
+      <span class="comment"># Or: export OPENAI_API_KEY=sk-...</span><br>
+      <span class="comment"># Or: ollama serve  (free, local)</span><br><br>
       <span class="comment"># Init a project</span><br>
       <span class="cmd">productteam init</span><br><br>
       <span class="comment"># Run the full pipeline</span><br>
       <span class="cmd">productteam run "a CLI tool that estimates LLM API costs"</span>
     </div>
-  </div>
-</section>
-
-<!-- CLI Commands -->
-<section class="how-section">
-  <div class="container">
-    <p class="section-label">CLI</p>
-    <h2 class="section-title">Commands</h2>
-    <p class="section-desc">Every command you need.</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:16px;">
       <div class="install-block" style="margin:0;">
-        <span class="comment"># Run the pipeline</span><br>
-        <span class="cmd">productteam run "concept"</span><br>
+        <span class="comment"># Pipeline control</span><br>
         <span class="cmd">productteam run</span> <span class="comment"># resume</span><br>
         <span class="cmd">productteam recover</span> <span class="comment"># unstick</span><br>
         <span class="cmd">productteam run --auto-approve</span>
@@ -771,103 +575,38 @@
       <div class="install-block" style="margin:0;">
         <span class="comment"># Forge: phone to product</span><br>
         <span class="cmd">productteam forge "idea"</span><br>
-        <span class="cmd">productteam forge --listen</span><br>
+        <span class="cmd">productteam forge --listen --dashboard</span><br>
         <span class="cmd">productteam forge status</span>
       </div>
       <div class="install-block" style="margin:0;">
-        <span class="comment"># Setup &amp; diagnostics</span><br>
-        <span class="cmd">productteam init</span><br>
+        <span class="comment"># Diagnostics</span><br>
         <span class="cmd">productteam doctor</span><br>
-        <span class="cmd">productteam status</span>
-      </div>
-      <div class="install-block" style="margin:0;">
-        <span class="comment"># Configuration</span><br>
-        <span class="cmd">productteam config</span><br>
-        <span class="cmd">productteam config set pipeline.provider ollama</span><br>
-        <span class="cmd">productteam config set pipeline.model llama3</span>
+        <span class="cmd">productteam status</span><br>
+        <span class="cmd">productteam test</span>
       </div>
     </div>
   </div>
 </section>
 
-<!-- Forge -->
-<section class="pipeline-section">
+<!-- Who This Is For -->
+<section class="section">
   <div class="container">
-    <p class="section-label">Forge</p>
-    <h2 class="section-title">Phone to product</h2>
-    <p class="section-desc">Submit an idea from anywhere &mdash; your phone, a browser, the CLI, or a GitHub Issue. The dashboard at <code style="font-family:var(--mono);font-size:13px;color:var(--green);">http://&lt;your-ip&gt;:7654</code> has a submit form, live status, and gate approval buttons. All from your phone's browser.</p>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;">
-      <div class="gate-card">
-        <div class="gate-number">1</div>
-        <div class="gate-title">Submit</div>
-        <div class="gate-desc">From your phone's browser, CLI, or GitHub Issue</div>
+    <p class="section-label">Fit</p>
+    <h2 class="section-title">Who this is for</h2>
+    <p class="section-desc" style="max-width:720px;">ProductTeam is an opinionated, auditable idea-to-code operating system for small software teams.</p>
+    <div class="guarantee-grid">
+      <div class="guarantee-card">
+        <h4>Solo founders and indie hackers</h4>
+        <p>You can describe a product but want structured, auditable AI execution instead of chatting with a coding assistant. ProductTeam gives you a delivery pipeline, not a conversation partner.</p>
       </div>
-      <div class="gate-card">
-        <div class="gate-number">2</div>
-        <div class="gate-title">Daemon runs</div>
-        <div class="gate-desc">PRD, plan, build, evaluate, document. Fully headless.</div>
+      <div class="guarantee-card">
+        <h4>Small product teams</h4>
+        <p>You want PRD &rarr; Sprint &rarr; Build &rarr; Evaluate &rarr; Document &rarr; Ship with human gates at every strategic decision point. ProductTeam encodes a software delivery doctrine you can trust.</p>
       </div>
-      <div class="gate-card">
-        <div class="gate-number">3</div>
-        <div class="gate-title">Approve gates</div>
-        <div class="gate-desc">Get notified via webhook or Slack. Approve from your phone's browser or CLI.</div>
+      <div class="guarantee-card">
+        <h4>Anyone tired of AI that grades its own homework</h4>
+        <p>The evaluator loop is the difference between "the AI said it's done" and "the AI proved it works." If you've been burned by hallucinated features or rubber-stamped tests, this is for you.</p>
       </div>
-      <div class="gate-card">
-        <div class="gate-number">4</div>
-        <div class="gate-title">Product ready</div>
-        <div class="gate-desc">Code written, tests passing, docs generated. Ship it.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- Design Evaluator -->
-<section class="team-section">
-  <div class="container">
-    <div style="background:var(--surface);border:1px solid var(--yellow);border-radius:8px;padding:32px;">
-      <p class="section-label" style="color:var(--yellow);">Standalone Skill</p>
-      <h2 class="section-title">Design Evaluator</h2>
-      <p class="section-desc" style="margin-bottom:24px;">Grades visual artifacts like a senior designer with 15 years of experience. Four scoring dimensions, evidence-based feedback, no vague criticism.</p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">
-        <div style="text-align:center;padding:16px;">
-          <div style="font-size:24px;font-weight:700;color:var(--yellow);">30%</div>
-          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">Coherence</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Unified visual language</div>
-        </div>
-        <div style="text-align:center;padding:16px;">
-          <div style="font-size:24px;font-weight:700;color:var(--yellow);">25%</div>
-          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">Originality</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Deliberate creative choices</div>
-        </div>
-        <div style="text-align:center;padding:16px;">
-          <div style="font-size:24px;font-weight:700;color:var(--yellow);">25%</div>
-          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">Craft</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Typography, spacing, contrast</div>
-        </div>
-        <div style="text-align:center;padding:16px;">
-          <div style="font-size:24px;font-weight:700;color:var(--yellow);">20%</div>
-          <div style="font-family:var(--mono);font-size:13px;font-weight:600;">Functionality</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:4px;">User understands in 10 sec</div>
-        </div>
-      </div>
-      <p style="font-size:13px;color:var(--muted);margin-top:16px;">4.0+ = PASS &nbsp;&middot;&nbsp; 3.0-3.9 = NEEDS_WORK &nbsp;&middot;&nbsp; Below 3.0 = FAIL</p>
-    </div>
-  </div>
-</section>
-
-<!-- Works With -->
-<section class="compare-section">
-  <div class="container">
-    <p class="section-label">Works With</p>
-    <h2 class="section-title">Multi-provider support</h2>
-    <p class="section-desc">Thinker stages work with any provider. Configure once in productteam.toml.</p>
-    <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:24px;">
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">Anthropic Claude</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">OpenAI GPT-4o</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">Ollama (local)</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">Google Gemini</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">LM Studio</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 24px;font-family:var(--mono);font-size:14px;">vLLM</div>
     </div>
   </div>
 </section>
@@ -878,13 +617,15 @@
     <p>
       <a href="https://github.com/scottconverse/productteam">GitHub</a>
       &nbsp;&middot;&nbsp;
-      <a href="terms.html">Terms of Service</a>
+      <a href="https://pypi.org/project/productteam/">PyPI</a>
+      &nbsp;&middot;&nbsp;
+      <a href="terms.html">Terms</a>
       &nbsp;&middot;&nbsp;
       MIT License
       &nbsp;&middot;&nbsp;
       Built by Scott Converse
     </p>
-    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.3.1 &middot; Powered by Claude</p>
+    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.3.2 &middot; Works with any LLM</p>
   </div>
 </footer>
 

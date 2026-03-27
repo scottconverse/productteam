@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.2] - 2026-03-26
+
+### Changed
+- **Updated README** — Rewrote for public release: clearer structure, Forge headline feature, safety section, CLI reference, configuration guide.
+- **Updated landing page** — New `docs/index.html` with Forge hero section, pipeline visualization, comparison table, and getting started guide.
+- **Updated PyPI description** — Now matches the README tagline.
+
 ## [2.3.1] - 2026-03-26
 
 ### Fixed
