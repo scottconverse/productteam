@@ -246,3 +246,166 @@ deliverables, and acceptance criteria look right before the Builder starts.
 6. **Number sprints sequentially.** Use `list_dir` to check `.productteam/sprints/` for existing sprint files and use the next available number. Write each sprint as its own `.yaml` file using `write_file`. Never combine multiple sprints into one file.
 7. **Release sprints MUST include documentation and publishing.** When a sprint produces shippable code, the deliverables MUST include: README updates (test counts, new features, fixes), documentation updates, and any publishing steps. Code without updated docs is not shippable.
 8. **Docs deliverables are testable.** Acceptance criteria for docs include: "README reflects current test count", "Install commands are correct", "No placeholder URLs remain".
+
+---
+
+## Decomposition Patterns
+
+How you break work apart determines whether the Builder succeeds or flounders. These patterns cover the most common decomposition scenarios.
+
+### Pattern 1: Vertical Slice (Feature-First)
+
+Split by user-facing feature, not by technical layer. Each sprint delivers one complete feature from data model through API through tests.
+
+**Use when:** Building a product with multiple independent features (e.g., a CLI with several subcommands, an API with distinct endpoint groups).
+
+**Example:** A task tracker CLI with `add`, `list`, `done`, and `export` commands.
+- Sprint 1: Core data models + `add` command + tests
+- Sprint 2: `list` command with filtering + tests
+- Sprint 3: `done` command + status transitions + tests
+- Sprint 4: `export` command (JSON/CSV) + tests
+- Sprint 5: Documentation, README, packaging
+
+**Anti-pattern:** Sprint 1 = all models, Sprint 2 = all CLI commands, Sprint 3 = all tests. This fails because nothing is testable until Sprint 3, and the Builder has no feedback loop.
+
+### Pattern 2: Foundation-Then-Features
+
+Build the shared infrastructure first, then layer features on top.
+
+**Use when:** Multiple features depend on the same core abstraction (config loader, database connection, authentication layer).
+
+**Example:** An API server with auth, users, and dashboard endpoints.
+- Sprint 1: Database models + config loader + connection pooling + tests
+- Sprint 2: Auth endpoints (register, login, token refresh) + tests
+- Sprint 3: User CRUD endpoints + tests
+- Sprint 4: Dashboard aggregation endpoints + tests
+- Sprint 5: Documentation + deployment config
+
+**When to use this over vertical slices:** When the shared layer is complex enough to justify its own sprint (>3 files, non-trivial logic). If the shared layer is just one config file and one model file, fold it into the first feature sprint instead.
+
+### Pattern 3: Inside-Out (Core Logic First)
+
+Start with the pure business logic (no I/O, no CLI, no API), then wrap it in interfaces.
+
+**Use when:** The core algorithm or transformation is the hard part, and the interface is straightforward.
+
+**Example:** A code analysis tool that parses ASTs and reports metrics.
+- Sprint 1: AST parser + metric calculators + unit tests (pure functions, no I/O)
+- Sprint 2: File discovery + report formatter + integration tests
+- Sprint 3: CLI interface + config loading + end-to-end tests
+- Sprint 4: Documentation + packaging
+
+### Pattern 4: Modify-Existing (Enhancement Sprint)
+
+When adding to an existing codebase rather than building from scratch, every deliverable uses `action: modify` and acceptance criteria reference the existing behavior that must be preserved.
+
+**Use when:** Extending a shipped product with new capabilities.
+
+**Key difference:** Acceptance criteria must include regression guards: "Existing tests continue to pass", "Existing CLI commands produce identical output", "No breaking changes to public API".
+
+---
+
+## Sizing Heuristics
+
+Getting scope right is the difference between a sprint that ships cleanly and one that stalls at tool call 60 with half the work undone.
+
+### Lines-of-Code Estimator
+
+| Component Type | Typical LOC | Tool Calls (write+verify) |
+|---------------|-------------|--------------------------|
+| Pydantic model file | 30-80 | 2-3 |
+| CLI command module | 50-120 | 3-4 |
+| FastAPI router | 60-150 | 3-4 |
+| Unit test file | 50-200 | 3-5 |
+| Config loader | 30-60 | 2-3 |
+| Utility module | 40-100 | 2-3 |
+| Integration test file | 80-200 | 3-5 |
+
+### The 40-Call Budget
+
+A well-planned medium sprint uses roughly 40 tool calls:
+- 5-8 deliverables x 3 calls each (write, verify, fix) = 15-24 calls
+- 5-8 exploration calls (reading existing files, checking patterns) = 5-8 calls
+- 5-10 overhead calls (directory creation, config updates, running tests) = 5-10 calls
+
+If your deliverable count times 4 exceeds 40, the sprint is too large. Split it.
+
+### Complexity Signals
+
+**This sprint is probably too large if:**
+- More than 3 deliverables have 5+ acceptance criteria each
+- Any single file is expected to exceed 200 lines
+- The sprint introduces more than 2 new external dependencies
+- The notes section needs more than 3 sentences of architectural context
+- You find yourself writing "and also" in deliverable descriptions
+
+**This sprint is probably too small if:**
+- Fewer than 3 deliverables
+- All acceptance criteria are trivially satisfiable (just "file exists")
+- The total expected LOC is under 100
+- No test deliverable is included
+
+---
+
+## Common Planning Mistakes
+
+These are the failure modes seen most often. Avoid them.
+
+### Mistake 1: Testing as an Afterthought
+
+**Wrong:** 7 code deliverables + 1 test file covering everything.
+**Right:** Each code deliverable has a corresponding test deliverable, or tests are co-located with the code they test. The test file should be a deliverable with its own acceptance criteria specifying minimum test count and coverage areas.
+
+### Mistake 2: Vague Acceptance Criteria
+
+**Wrong:** "Handles errors gracefully"
+**Right:** "Returns HTTP 404 with JSON body `{\"error\": \"not_found\", \"detail\": \"...\" }` when resource ID does not exist"
+
+**Wrong:** "Logging is implemented"
+**Right:** "All public functions log entry and exit at DEBUG level using structlog; errors log at ERROR level with full traceback"
+
+**Wrong:** "Configuration is flexible"
+**Right:** "Config loader reads from `~/.myapp/config.toml`, falls back to env vars prefixed with `MYAPP_`, falls back to hardcoded defaults for all values"
+
+### Mistake 3: Implicit Dependencies Between Sprints
+
+If Sprint 2 requires Sprint 1's database models but you do not list them in Sprint 2's dependencies, the Builder may attempt Sprint 2 in isolation and fail. Always make cross-sprint dependencies explicit in the `dependencies` field.
+
+### Mistake 4: Mixing Create and Modify Without Context
+
+When a deliverable uses `action: modify`, the Builder needs to know what already exists in that file. Add a constraint like: "Preserve existing function signatures in `src/api.py`; add new endpoints alongside existing ones." Without this, the Builder may overwrite working code.
+
+### Mistake 5: No Constraint on Existing Patterns
+
+If the codebase already uses `click` for CLI and you do not mention it, the Builder might use `argparse` or `typer`. If models use `dataclasses` and you do not say so, the Builder might use Pydantic. Always state the existing patterns as constraints.
+
+### Mistake 6: Over-Specifying Implementation
+
+**Wrong acceptance criterion:** "Use a for loop to iterate over items and append to a list"
+**Right acceptance criterion:** "Returns a list of all items matching the filter predicate"
+
+The Planner defines WHAT, not HOW. Leave implementation decisions to the Builder. Acceptance criteria should describe observable behavior, not code structure.
+
+### Mistake 7: Forgetting the Happy Path
+
+Every feature needs at least one acceptance criterion for the success case. It is easy to focus on error handling and edge cases while forgetting to specify what correct output looks like. Include both: "Returns sorted list of tasks when tasks exist" AND "Returns empty list when no tasks exist."
+
+---
+
+## Sprint Contract Checklist
+
+Before finalizing any sprint contract, verify:
+
+- [ ] 5-8 deliverables (not fewer, not more)
+- [ ] Every deliverable has a specific file path
+- [ ] Every acceptance criterion is a testable assertion
+- [ ] At least one test deliverable exists
+- [ ] Scope is `small` or `medium` (never `large`)
+- [ ] Dependencies list all external packages and prerequisite files
+- [ ] Constraints reference existing codebase patterns
+- [ ] YAML is valid and parseable
+- [ ] No deliverable description contains implementation details
+- [ ] Cross-sprint dependencies are explicit
+- [ ] `action` field is `create` or `modify` for every deliverable
+- [ ] Notes field explains architectural context the Builder needs
+- [ ] Contract YAML is under 10KB

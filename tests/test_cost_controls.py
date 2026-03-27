@@ -51,9 +51,25 @@ class TestCostTracker:
 
     def test_est_cost_haiku(self):
         tracker = CostTracker(model_id="claude-haiku-4-5-20251001", budget_usd=10.0)
-        # 1M input tokens at $0.80/M + 100K output at $4.00/M = $0.80 + $0.40 = $1.20
+        # 1M input at $0.80/M + 100K output at $4.00/M = $0.80 + $0.40 = $1.20
         tracker.add({"input_tokens": 1_000_000, "output_tokens": 100_000})
         assert tracker.est_cost == pytest.approx(1.20, abs=0.01)
+
+    def test_est_cost_includes_cache_tokens(self):
+        tracker = CostTracker(model_id="claude-haiku-4-5-20251001", budget_usd=10.0)
+        # With caching: input_tokens is small, cache_read is large
+        # 10K input at $0.80/M = $0.008
+        # 100K cache_create at $0.80*1.25/M = $0.10
+        # 1M cache_read at $0.80*0.1/M = $0.08
+        # 50K output at $4.00/M = $0.20
+        # Total = $0.388
+        tracker.add({
+            "input_tokens": 10_000,
+            "output_tokens": 50_000,
+            "cache_creation_input_tokens": 100_000,
+            "cache_read_input_tokens": 1_000_000,
+        })
+        assert tracker.est_cost == pytest.approx(0.388, abs=0.01)
 
     def test_est_cost_sonnet(self):
         tracker = CostTracker(model_id="claude-sonnet-4-6", budget_usd=10.0)

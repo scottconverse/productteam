@@ -201,3 +201,214 @@ command2 [args] [options]    # description
 8. **Name check everything.** Package names, CLI command names, repo names — verify availability before committing to a name in the PRD.
 9. **In automated contexts, apply defaults and proceed without asking.** If there is no prior conversation indicating a human is present and responding, write the PRD directly from the concept plus sensible defaults. Do not ask questions that will never be answered.
 10. **Do not invent product names.** If the concept includes a product name, use it exactly. If the concept does not include a product name, use the placeholder `[PRODUCT NAME]` throughout the PRD and note at the top: "Product name not specified in concept — using placeholder. Replace before shipping." Do not coin a creative name. That decision belongs to the human, not the pipeline.
+
+---
+
+## Writing Effective User Stories
+
+User stories bridge the gap between a vague product concept and concrete acceptance criteria. They belong in the Core Features section of the PRD.
+
+### User Story Format
+
+Use the standard format but make it specific:
+
+**Weak:** "As a user, I want to search for items so that I can find what I need."
+**Strong:** "As a developer with 50+ prompt files in a monorepo, I want to search prompt files by model name and tag so that I can find the right template without opening every file."
+
+### Acceptance Criteria Pattern
+
+Each user story should have 3-7 acceptance criteria using Given/When/Then or simple assertions:
+
+```
+### Feature: Prompt Search
+
+**Story:** As a developer with 50+ prompt files, I want to search by model
+name and tag so I can find templates without opening every file.
+
+**Acceptance Criteria:**
+- Given a directory with .prompt files, when `search --model gpt-4` is run,
+  then only files containing `model: gpt-4` in frontmatter are returned
+- Given no matching files, when search is run, then exit code 0 with
+  "No matching prompts found" on stderr
+- Search completes in under 2 seconds for 500 files
+- Results display file path, model, and first line of the prompt body
+- Supports glob patterns: `search --tag "eval-*"` matches "eval-v1", "eval-v2"
+```
+
+### Common User Story Mistakes
+
+1. **Too generic.** "As a user, I want it to work" tells the Planner nothing. Name the specific persona and their specific context.
+
+2. **Implementation-as-story.** "As a developer, I want a Redis cache layer" is a technical task, not a user story. Reframe: "As a user running repeated analyses, I want results cached so subsequent runs complete in under 1 second."
+
+3. **Missing the negative case.** Every story implies a failure mode. If the story is "search for items," add acceptance criteria for: no results, invalid query, permission denied, timeout.
+
+4. **Compound stories.** "As a user, I want to create, edit, and delete tasks." Split into three stories. Each needs its own acceptance criteria.
+
+---
+
+## Scope Management
+
+The PRD defines scope boundaries. Getting this right prevents the most common pipeline failure: a sprint that tries to build too much and runs out of tool calls.
+
+### The Three Scope Levels
+
+| Level | Description | Typical Sprints | Pipeline Cost (Haiku) |
+|-------|-------------|----------------|----------------------|
+| Small | Single-purpose CLI tool, one main feature | 1-2 sprints | $0.05 - $0.15 |
+| Medium | Multi-command CLI or small API, 3-5 features | 3-5 sprints | $0.15 - $0.40 |
+| Large | Full application, many features, multiple interfaces | 6-10 sprints | $0.40 - $1.00 |
+
+### Scope Signals
+
+**The concept is SMALL if:**
+- One primary action (convert, analyze, format, validate)
+- Single input type, single output type
+- No persistent state or configuration needed
+- Could be described completely in 2-3 sentences
+
+**The concept is MEDIUM if:**
+- 3-5 distinct commands or endpoints
+- Configuration file with 5-15 options
+- Needs both unit and integration tests
+- Requires 2-3 external dependencies
+
+**The concept is LARGE if:**
+- Multiple user roles or interaction modes
+- Persistent storage (database, file system state)
+- Background processing or async operations
+- 5+ external dependencies
+- Would take a human developer more than a week
+
+### Scope Reduction Techniques
+
+When a concept is too large for a reasonable number of sprints, reduce scope using these strategies:
+
+1. **Cut to MVP.** What is the smallest version that delivers value? Put everything else in the roadmap's Phase 2 column.
+
+2. **Remove the UI.** If the concept includes both CLI and web interface, cut the web interface. CLI-only ships faster.
+
+3. **Hardcode before configuring.** If 10 options are described, hardcode 7 of them with sensible defaults. Make them configurable in a later version.
+
+4. **Drop secondary output formats.** If the concept mentions JSON, CSV, HTML, and PDF output, ship JSON only. Add formats in Phase 2.
+
+5. **Simplify the data model.** If the concept describes 8 entity types with relationships, reduce to the 3 core entities needed for the primary use case.
+
+### Non-Goals as Scope Armor
+
+The Non-Goals section is not filler. It is the single most important defense against scope creep. Write non-goals that anticipate the Builder's temptation to over-build:
+
+**Weak non-goals:**
+- "Not a full IDE"
+- "Not enterprise-ready"
+
+**Strong non-goals:**
+- "Does NOT support real-time collaboration. Single-user CLI only."
+- "Does NOT validate prompt correctness — only structure and syntax."
+- "Does NOT integrate with CI/CD systems. Manual invocation only in v0.1."
+- "Does NOT support Windows-specific path handling. Unix paths only in MVP."
+
+---
+
+## PRD Section-by-Section Writing Guide
+
+### Executive Summary
+
+Two to three sentences maximum. First sentence: what the product IS. Second sentence: who it is FOR. Third sentence (optional): why NOW or why THIS approach.
+
+**Template:** "[Product] is a [type of tool] that [primary action] for [target user]. It solves [specific pain point] by [approach]. Unlike [competitor/current state], it [key differentiator]."
+
+**Example:** "PromptDiff is a CLI tool that diffs and versions prompt template files for AI product teams. It solves the problem of tracking changes across dozens of prompt files in a monorepo without structured tooling. Unlike generic diff tools, it understands prompt frontmatter and highlights semantic changes separately from formatting changes."
+
+### Problem Statement
+
+Three elements required: (1) who has the problem, (2) what the problem is concretely, (3) why current solutions fail.
+
+Do not write abstract problem statements. "Developers struggle with complexity" is useless. "Teams with 50+ prompt files cannot track which prompts changed between deployments because git diff shows formatting noise alongside semantic changes" is actionable.
+
+### Tech Stack Section
+
+Be prescriptive. The Planner should not have to choose a framework. State:
+- Exact language version (Python 3.10+, not "Python")
+- Specific framework (Typer, not "a CLI framework")
+- Specific libraries with minimum versions (Pydantic>=2.0, not "a validation library")
+- Build system (hatchling, setuptools, flit — pick one)
+- Test framework (pytest, not "standard testing")
+
+If you are unsure, the defaults are: Python 3.10+, Typer for CLI, Pydantic v2 for models, hatchling for build, pytest for testing.
+
+### Testing Strategy Section
+
+Do not write "comprehensive testing." Instead specify:
+- Minimum test count target (e.g., "40+ tests for MVP")
+- Types of tests required (unit, integration, end-to-end)
+- Specific edge cases that MUST be covered (empty input, malformed config, permission errors)
+- Coverage target if applicable (e.g., "80% line coverage on core modules")
+
+### Dependencies Table
+
+Every dependency must have a reason. If you cannot articulate why a dependency is needed in one phrase, it probably is not needed. The fewer dependencies, the better — each one is a maintenance burden and a potential security risk.
+
+**Good dependency entry:**
+| pydantic | >=2.0 | Data validation and serialization for all models |
+
+**Bad dependency entry:**
+| requests | latest | HTTP calls |
+(Why does a CLI tool need HTTP? What endpoints? If it is for update checking, say so explicitly.)
+
+---
+
+## Competitor Research Guide
+
+Phase 3 (Research) is not optional. The PRD must demonstrate awareness of the competitive landscape.
+
+### What to Research
+
+1. **Direct competitors:** Tools that solve the same problem for the same user. Search PyPI, npm, GitHub, and product directories.
+2. **Adjacent tools:** Tools that solve a related problem and might expand into this space. Note them as potential future competitors.
+3. **Built-in solutions:** Does the language or framework already provide this capability? (e.g., Python's built-in `difflib` for diff functionality)
+
+### How to Document Competitors
+
+In the PRD, include a brief competitive analysis:
+
+```
+## Competitive Landscape
+
+| Tool | What It Does | Gap This Product Fills |
+|------|-------------|----------------------|
+| existing-tool-1 | General-purpose X | No support for Y-specific workflows |
+| existing-tool-2 | Y-specific but GUI only | No CLI, no CI/CD integration |
+| built-in-lib | Basic X capability | No frontmatter parsing, no structured output |
+
+**Positioning:** [Product] targets the gap between [general tool] and [specialized tool]
+by providing [specific capability] in a [specific interface].
+```
+
+### Name Availability Check
+
+Before committing to any product name in the PRD, verify availability on:
+- PyPI (`pip install [name]` should not already exist)
+- npm (if applicable)
+- GitHub (the repo name should be available or owned by the user)
+
+If the name is taken, note it in the PRD and suggest 2-3 alternatives. Do not silently pick a name that collides with an existing package.
+
+---
+
+## Version Roadmap Best Practices
+
+The Version Roadmap section communicates what ships when. It is a commitment device, not a wish list.
+
+### Rules for Version Rows
+
+- **0.1.0 (MVP):** Only features required for the product to be minimally useful. If a user cannot accomplish the core use case with this version, scope is wrong. Every feature listed here MUST appear in the Core Features section with full detail.
+- **0.2.0 (Phase 2):** Features that make the product pleasant to use but are not strictly necessary. Configuration options, additional output formats, improved error messages. These can have lighter descriptions in the PRD.
+- **1.0.0 (Full Release):** The complete vision. Stable API contract. Everything in the Goals section is realized. This version may never ship if the product pivots, and that is fine.
+
+### What NOT to Put in the Roadmap
+
+- Vague aspirations ("Performance improvements", "Better UX")
+- Features that belong in a different product
+- Infrastructure that is invisible to users (internal refactors, CI changes)
+- Features with no acceptance criteria defined anywhere in the PRD

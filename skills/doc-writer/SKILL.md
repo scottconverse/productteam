@@ -250,3 +250,245 @@ Style rules for terms.html:
 8. **Plain text version must be readable.** Properly reformatted for plain text — not markdown with formatting stripped.
 9. **Match the code exactly.** Function signatures, option names, default values — all must match the source.
 10. **Report PRD gaps.** If the PRD describes features that were not implemented, note them in your output report (but do NOT document them as existing features).
+
+---
+
+## Documentation Patterns Reference
+
+### Quick Start Pattern
+
+The Quick Start section is the most important section in any README. It must answer: "How do I go from zero to working in under 60 seconds?"
+
+**Structure:**
+1. One install command
+2. One minimal usage example (3-5 lines maximum)
+3. One expected output
+
+**Example for a CLI tool:**
+```
+## Quick Start
+
+pip install mytool
+
+# Analyze a file
+mytool analyze input.csv --format json
+
+# Output:
+# {"rows": 150, "columns": 8, "missing": 3, "types": {...}}
+```
+
+**Example for a Python library:**
+```
+## Quick Start
+
+pip install mylib
+
+from mylib import Analyzer
+
+result = Analyzer("input.csv").run()
+print(result.summary)
+# rows=150 cols=8 missing=3
+```
+
+**Common Quick Start mistakes:**
+- Showing import statements before the install command
+- Using a complex example that requires setup or prerequisites
+- Omitting the expected output (users need to verify it worked)
+- Including error handling in the quick start (save it for the full docs)
+
+### CLI Reference Pattern
+
+Every CLI command needs four elements: synopsis, description, options table, and example.
+
+```
+### `mytool analyze`
+
+Analyze a data file and produce a summary report.
+
+**Usage:** `mytool analyze <FILE> [OPTIONS]`
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--format` | `json\|csv\|table` | `table` | Output format |
+| `--output` | `PATH` | stdout | Write results to file |
+| `--verbose` | flag | off | Show detailed statistics |
+
+**Example:**
+mytool analyze data.csv --format json --output report.json
+```
+
+**Rules for CLI docs:**
+- Option names must exactly match the code (read the actual `add_argument` or Typer parameter definitions)
+- Default values must match hardcoded defaults in the source
+- Type constraints must match validation logic
+- If an option accepts an enum of values, list all valid values
+
+### API Reference Pattern
+
+For Python libraries, document every public function with this structure:
+
+```
+### `module.function_name(param1, param2, *, keyword_only=default)`
+
+One-sentence description of what this function does.
+
+**Parameters:**
+- `param1` (`str`): Description of first parameter
+- `param2` (`int`, optional): Description. Defaults to `10`
+- `keyword_only` (`bool`): Description. Defaults to `False`
+
+**Returns:** `ResultType` — description of return value
+
+**Raises:**
+- `ValueError`: When param1 is empty
+- `FileNotFoundError`: When the referenced path does not exist
+
+**Example:**
+result = function_name("input.txt", 20, keyword_only=True)
+```
+
+**Rules for API docs:**
+- Signature must exactly match the source code (read `def` line)
+- Parameter types must match type hints in the source
+- Default values must match source defaults
+- Raises section must list only exceptions the function actually raises (read the code)
+- Example must be runnable without modification
+
+### Configuration Reference Pattern
+
+Every configuration option needs: name, type, default, description, and an example.
+
+```
+## Configuration
+
+Config file location: `~/.mytool/config.toml`
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `output_format` | `string` | `"table"` | Default output format (`json`, `csv`, `table`) |
+| `max_rows` | `integer` | `1000` | Maximum rows to process per file |
+| `color` | `boolean` | `true` | Enable colored terminal output |
+| `log_level` | `string` | `"WARNING"` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+
+**Example config file:**
+[defaults]
+output_format = "json"
+max_rows = 5000
+
+[display]
+color = false
+```
+
+### CHANGELOG Format
+
+Follow Keep a Changelog conventions. Every version entry needs a date and categorized changes.
+
+```
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/).
+
+## [0.2.0] - 2025-07-15
+
+### Added
+- JSON output format for `analyze` command
+- `--verbose` flag for detailed statistics
+- Config file support (`~/.mytool/config.toml`)
+
+### Changed
+- Default output format changed from CSV to table
+- Improved error messages for invalid input files
+
+### Fixed
+- Crash when input file contains empty rows
+- Incorrect column count when headers have trailing whitespace
+
+## [0.1.0] - 2025-06-01
+
+### Added
+- Initial release
+- `analyze` command with CSV and table output
+- Basic validation for input files
+```
+
+**Categories (use only these):**
+- **Added** — New features
+- **Changed** — Changes to existing functionality
+- **Deprecated** — Features that will be removed
+- **Removed** — Features that were removed
+- **Fixed** — Bug fixes
+- **Security** — Vulnerability patches
+
+### Error Messages Documentation
+
+If the tool produces specific error messages, document them in a troubleshooting section:
+
+```
+## Troubleshooting
+
+### "Config file not found at ~/.mytool/config.toml"
+
+The tool looks for a config file at `~/.mytool/config.toml`. If the file
+does not exist, the tool uses built-in defaults. To create a config file:
+
+    mkdir -p ~/.mytool
+    mytool init-config
+
+### "Invalid format: xyz"
+
+The `--format` option accepts only: `json`, `csv`, `table`.
+Check for typos in the format name.
+
+### Exit code 2: "Permission denied"
+
+The tool cannot read the input file. Check file permissions:
+
+    ls -la input.csv
+    chmod 644 input.csv
+```
+
+---
+
+## README Structure Checklist
+
+Before submitting any README, verify this ordering:
+
+1. **Title + one-line description** (from pyproject.toml)
+2. **Badges** (if applicable: PyPI version, test status, Python version)
+3. **Installation** (one command, above the fold)
+4. **Quick Start** (minimal working example with expected output)
+5. **Features** (bullet list, every item verified against code)
+6. **CLI Reference** (if CLI exists: every command, every option)
+7. **Python API** (if library: key public functions with signatures)
+8. **Configuration** (if config exists: every option with defaults)
+9. **Architecture / How It Works** (with SVG diagram)
+10. **Development** (how to set up dev environment, run tests)
+11. **License**
+
+Sections that do not apply should be omitted entirely, not left as empty headers.
+
+---
+
+## Plain Text Conversion Rules
+
+The README-full.txt is for environments where markdown cannot render: email attachments, terminal pagers, legacy documentation systems. It must be independently readable.
+
+### Conversion Table
+
+| Markdown | Plain Text Equivalent |
+|----------|----------------------|
+| `# Heading` | `HEADING` followed by `========` underline |
+| `## Heading` | `Heading` followed by `--------` underline |
+| `### Heading` | `Heading` (no underline, blank line above) |
+| `**bold**` | UPPERCASE or *asterisks* |
+| `` `code` `` | 'single quotes' or unchanged |
+| Code block | Indented 4 spaces, no fence markers |
+| `- bullet` | `- bullet` (unchanged) |
+| `[link](url)` | `link (url)` or `link [1]` with footnotes |
+| Table | Aligned columns using spaces, dashes for header separator |
+
+### Line Width
+
+Wrap all prose at 78 characters. Code blocks may extend to 100 characters if wrapping would break the example. Never wrap inside URLs.

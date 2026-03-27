@@ -49,8 +49,13 @@ class CostTracker:
         pricing = _PROVIDER_PRICING.get(self.model_id)
         if not pricing:
             return None
+        input_rate = pricing["input"]
+        # Anthropic billing: input_tokens at 1x, cache_creation at 1.25x,
+        # cache_read at 0.1x, output at output rate.
         return (
-            self.total_input / 1_000_000 * pricing["input"]
+            self.total_input / 1_000_000 * input_rate
+            + self.total_cache_creation / 1_000_000 * input_rate * 1.25
+            + self.total_cache_read / 1_000_000 * input_rate * 0.1
             + self.total_output / 1_000_000 * pricing["output"]
         )
 
@@ -184,8 +189,11 @@ class SupervisorResult:
         pricing = _PROVIDER_PRICING.get(model_id, {})
         est_cost = None
         if pricing:
+            input_rate = pricing["input"]
             est_cost = (
-                total_input / 1_000_000 * pricing["input"]
+                total_input / 1_000_000 * input_rate
+                + total_cache_creation / 1_000_000 * input_rate * 1.25
+                + total_cache_read / 1_000_000 * input_rate * 0.1
                 + total_output / 1_000_000 * pricing["output"]
             )
 
