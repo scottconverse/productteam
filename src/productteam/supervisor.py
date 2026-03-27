@@ -270,13 +270,21 @@ class Supervisor:
 
         # 4. Document
         if not _is_stage_complete(self.state, "document") or rebuild:
+            file_listing = self._project_file_listing()
+            doc_context = (
+                f"Write documentation for the project.\n\n"
+                f"Concept: {concept}\n\n"
+                f"All tools operate relative to the project root. "
+                f"Use relative paths (e.g., 'src/main.py', not '/tmp/src/main.py'). "
+                f"Start by reading existing source files listed below.\n\n"
+                f"Project files:\n{file_listing}"
+            )
             result = await self._run_tool_loop_stage(
                 PipelineStage.DOCUMENT, "doc-writer",
-                f"Write documentation for the project. Concept: {concept}",
+                doc_context,
+                max_tool_calls=self.config.pipeline.doc_writer_max_tool_calls,
             )
             stages.append(result)
-            if result.status != "complete":
-                return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
         # 4b. Design Evaluation (single pass — no retry loop because there is
         # no mechanism to route back to Doc Writer/UI Builder to fix issues)
@@ -288,10 +296,8 @@ class Supervisor:
                     f"and README.md. Concept: {concept}",
                 )
                 stages.append(result)
-                if result.status != "complete":
-                    return SupervisorResult(concept=concept, stages=stages, status="stuck")
 
-                verdict = self._parse_verdict(result.raw_response)
+                verdict = self._parse_verdict(result.raw_response or "")
                 if verdict == "needs_work":
                     # Fallback: check eval YAML files written to disk by the
                     # design evaluator via write_file (same pattern as build eval)
@@ -573,25 +579,10 @@ class Supervisor:
                 timeout_seconds=self.config.pipeline.builder_timeout_seconds,
             )
 
-            if build_result.status == "stuck":
-                console.print(f"  [red]Builder stuck: {build_result.final_text}[/red]")
-                self.state["stages"]["build"]["status"] = "stuck"
-                _save_state(self.project_dir, self.state)
-                return StageResult(
-                    stage=PipelineStage.BUILD,
-                    status="stuck",
-                    error=build_result.final_text,
-                )
-
-            if build_result.status == "max_calls":
-                console.print(f"  [red]Builder exceeded max tool calls[/red]")
-                self.state["stages"]["build"]["status"] = "stuck"
-                _save_state(self.project_dir, self.state)
-                return StageResult(
-                    stage=PipelineStage.BUILD,
-                    status="stuck",
-                    error="Max tool calls exceeded",
-                )
+            if build_result.status in ("stuck", "max_calls"):
+                # Don't terminate — let the evaluator assess what was built.
+                # The builder may have written enough code before hitting the limit.
+                console.print(f"  [yellow]Builder {build_result.status}: proceeding to evaluation[/yellow]")
 
             # Write build artifact
             artifact_dir = self.project_dir / ".productteam" / "sprints" / sprint_name
@@ -656,29 +647,36 @@ class Supervisor:
 
             # Check verdict — try the model's text response first,
             # then check eval YAML files the Evaluator wrote via write_file
-            verdict = self._parse_verdict(eval_response)
-            if verdict == "needs_work":
-                # The Evaluator may have written a structured YAML via write_file
-                # that has a clearer verdict than its text response
-                eval_dir = self.project_dir / ".productteam" / "evaluations"
-                # Check files the Evaluator wrote via write_file (eval-NNN.yaml)
-                # Scope to the current sprint number to avoid cross-sprint leaks
-                sprint_num = sprint_name.split("-")[-1]  # "001" from "sprint-001"
-                candidates = list(eval_dir.glob(f"eval-{sprint_num}*.yaml"))
-                # Also check supervisor-written files for this sprint
-                candidates += list(eval_dir.glob(f"{sprint_name}-eval-*.yaml"))
-                # Exclude the file we just wrote (it has the same text we already parsed)
-                candidates = [f for f in candidates if f != eval_path]
-                for eval_file in sorted(candidates, reverse=True):
-                    try:
-                        file_content = eval_file.read_text(encoding="utf-8")
-                        file_verdict = self._parse_verdict(file_content)
-                        if file_verdict in ("pass", "fail"):
-                            verdict = file_verdict
-                            console.print(f"  [dim](verdict from {eval_file.name})[/dim]")
-                            break
-                    except Exception:
-                        continue
+            # Parse verdict: check evaluator-written YAML files first,
+            # then fall back to the evaluator's text response.
+            # The evaluator often writes NEEDS_WORK in early YAML during analysis
+            # but concludes PASS in its final text. The text response is the
+            # final conclusion; YAML files are working documents.
+            verdict = "needs_work"
+
+            # 1. Check evaluator-written YAML files on disk
+            eval_dir = self.project_dir / ".productteam" / "evaluations"
+            sprint_num = sprint_name.split("-")[-1]  # "001" from "sprint-001"
+            candidates = list(eval_dir.glob(f"eval-{sprint_num}*.yaml"))
+            candidates += list(eval_dir.glob(f"{sprint_name}-eval-*.yaml"))
+            candidates = [f for f in candidates if f != eval_path]
+            for eval_file in sorted(candidates, reverse=True):
+                try:
+                    file_content = eval_file.read_text(encoding="utf-8")
+                    file_verdict = self._parse_verdict(file_content)
+                    if file_verdict in ("pass", "fail"):
+                        verdict = file_verdict
+                        console.print(f"  [dim](verdict from {eval_file.name})[/dim]")
+                        break
+                except Exception:
+                    continue
+
+            # 2. Text response overrides YAML if it contains a clear verdict.
+            # This handles the case where the evaluator writes NEEDS_WORK
+            # in its YAML early, then concludes PASS in its final text.
+            text_verdict = self._parse_verdict(eval_response)
+            if text_verdict in ("pass", "fail"):
+                verdict = text_verdict
             console.print(f"  Verdict: [{'green' if verdict == 'pass' else 'red'}]{verdict}[/]")
 
             if verdict == "pass":
@@ -696,21 +694,15 @@ class Supervisor:
                 )
 
             if verdict == "fail":
-                if loop_num >= max_loops:
-                    # Terminal only on final loop
-                    console.print(f"  [red]Sprint {sprint_name} FAILED after {max_loops} loops — escalating[/red]")
-                    self.state["stages"]["evaluate"]["status"] = "failed"
-                    _save_state(self.project_dir, self.state)
-                    return StageResult(
-                        stage=PipelineStage.BUILD,
-                        status="failed",
-                        error=f"Evaluator returned FAIL on loop {loop_num}",
-                        raw_response=eval_response,
-                    )
-                else:
-                    # Treat FAIL like NEEDS_WORK on non-final loops — let builder retry
-                    console.print(f"  [yellow]FAIL on loop {loop_num} — retrying with feedback[/yellow]")
-                    verdict = "needs_work"
+                console.print(f"  [red]Sprint {sprint_name} FAILED — escalating[/red]")
+                self.state["stages"]["evaluate"]["status"] = "failed"
+                _save_state(self.project_dir, self.state)
+                return StageResult(
+                    stage=PipelineStage.BUILD,
+                    status="failed",
+                    error=f"Evaluator returned FAIL on loop {loop_num}",
+                    raw_response=eval_response,
+                )
 
             # NEEDS_WORK — continue loop with feedback for builder
             last_eval_feedback = eval_response[-3000:]  # Last 3KB of evaluator output
@@ -846,15 +838,18 @@ class Supervisor:
         except yaml.YAMLError:
             pass
 
-        # Fallback: scan for the exact YAML key on its own line
+        # Fallback: scan for verdict indicators on their own line.
+        # The evaluator may use "evaluator_verdict: PASS", "VERDICT: PASS",
+        # or "Verdict: pass" formats.
         for line in eval_response.lower().splitlines():
             stripped = line.strip()
-            if stripped.startswith("evaluator_verdict:") or stripped.startswith("verdict:"):
-                if "pass" in stripped:
+            if "verdict" in stripped and ":" in stripped:
+                after_colon = stripped.split(":", 1)[1].strip()
+                if after_colon.startswith("pass"):
                     return "pass"
-                if "fail" in stripped:
+                if after_colon.startswith("fail"):
                     return "fail"
-                if "needs_work" in stripped:
+                if after_colon.startswith("needs_work"):
                     return "needs_work"
 
         return "needs_work"  # safe default

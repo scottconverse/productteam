@@ -274,6 +274,8 @@ def _execute_tool(
                 text=True,
                 timeout=timeout,
                 env=env,
+                encoding="utf-8",
+                errors="replace",
             )
             return json.dumps({
                 "stdout": result.stdout[-4000:] if len(result.stdout) > 4000 else result.stdout,

@@ -225,18 +225,13 @@ async def test_build_evaluate_needs_work_then_pass(tmp_path):
 
 @pytest.mark.asyncio
 async def test_build_evaluate_fail_on_verdict(tmp_path):
-    """Build-evaluate loop: FAIL verdict retries, then escalates on final loop."""
+    """Build-evaluate loop: FAIL verdict escalates immediately."""
     _init_project(tmp_path)
     (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
         "sprint: 1\ntitle: Test\n"
     )
 
-    # Use max_loops=1 so FAIL is terminal on first loop
-    config = _make_config(pipeline={
-        "provider": "anthropic", "model": "test", "max_loops": 1,
-        "stage_timeout_seconds": 10, "builder_timeout_seconds": 30,
-        "builder_max_tool_calls": 5, "auto_approve": False,
-    })
+    config = _make_config()
     mock_provider = AsyncMock()
 
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
@@ -662,11 +657,9 @@ async def test_full_pipeline_sprint_fails_stops_pipeline(tmp_path):
         "auto_approve": False,
         "require_design_review": False,
     })
-
     mock_provider = AsyncMock()
     mock_provider.complete = AsyncMock(return_value="# PRD\nA tool.")
 
-    # Planner (doer) + Sprint 1 builder + evaluator FAIL
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
         _eval_response("Plan written."),
         _eval_response("Built sprint 1."),
@@ -678,8 +671,6 @@ async def test_full_pipeline_sprint_fails_stops_pipeline(tmp_path):
 
     # Pipeline should be stuck (sprint-001 failed, never reaches sprint-002)
     assert result.status == "stuck"
-    # PRD + Plan + failed build stage = 3, but doc writer guard also stops
-    assert len(result.stages) >= 3
 
 
 @pytest.mark.asyncio

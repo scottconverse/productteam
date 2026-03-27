@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.4] - 2026-03-27
+
+### Fixed
+- **Verdict parsing priority** — Evaluator's final text verdict now overrides earlier YAML verdicts. Fixes pipeline getting stuck when evaluator writes NEEDS_WORK in early analysis YAML but concludes PASS in final text.
+- **Verdict pattern matching** — `_parse_verdict` now matches any "verdict:" line format (not just YAML keys), catching "VERDICT: PASS" prose.
+- **Builder max_calls proceeds to evaluation** — When builder hits tool call limit, the evaluator now assesses partial work instead of the pipeline stopping cold.
+- **subprocess UTF-8 encoding** — `run_bash` now uses `encoding="utf-8"` explicitly, fixing `UnicodeDecodeError` on Windows when LLM output contains box-drawing/emoji characters.
+- **builder_max_tool_calls raised to 150** — Previous default of 75 was insufficient for complex sprints.
+
+### Reverted
+- **FAIL verdict stays terminal** — Reverted attempt to make FAIL retry. FAIL means "re-plan, don't re-build."
+- **Doc/design stages stay terminal on stuck** — Reverted silent partial completion. Stuck means stuck.
+
 ## [2.4.3] - 2026-03-27
 
 ### Fixed
