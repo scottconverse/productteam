@@ -1,12 +1,15 @@
 # Changelog
 
-## [2.4.0] - 2026-03-26
+## [2.4.1] - 2026-03-26
 
 ### Security
 - **Dashboard binds to 127.0.0.1 by default** — Previously bound to 0.0.0.0, exposing the unauthenticated dashboard to the local network. Added `--lan` flag to opt into LAN access with a printed warning.
 - **run_bash defaults to shell=False** — Uses `shlex.split()` to prevent shell injection from LLM-constructed commands. Falls back to `shell=True` only when shell features (pipes, redirects, chains) are detected.
 - **Write restrictions on .claude/ and .productteam/** — Builder can no longer write to `.claude/` (agent prompt rewriting) or `.productteam/` (pipeline state corruption). Exception: `.productteam/sprints/` remains writable for Planner.
 - **Dependencies pinned to exact versions** — All runtime dependencies use `==` instead of `>=` ranges to prevent supply chain attacks via compromised upstream packages.
+
+### Fixed
+- **Ollama tool-use round-trips** — Ollama provider now converts Anthropic-format tool_use/tool_result messages to Ollama's native format (role: "tool", tool_calls). Fixes 400 errors on multi-turn tool loops.
 
 ## [2.3.2] - 2026-03-26
 
