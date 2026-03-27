@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "productteam"
-version = "2.2.0"
+version = "2.3.0"
 description = "AI-powered product development pipeline using Claude skills"
 readme = "README.md"
 license = { file = "LICENSE" }

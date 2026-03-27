@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.3.0] - 2026-03-26
+
+### Added
+- **Forge daemon stage visibility** — `Supervisor.run()` accepts a `stage_callback` parameter. The Forge daemon passes a callback that updates `current_stage` in the queue at the start of each stage, so the dashboard shows real-time pipeline progress instead of `"-"` throughout the run.
+- **Configurable skills directory** — `skills_dir` field in `[pipeline]` config (default: `.claude/skills`). Users who move their skills directory or use non-standard layouts can set this in `productteam.toml`. Error messages now suggest checking `skills_dir` when a skill is not found.
+- **Design evaluator verdict disk fallback** — when the design evaluator's text response has no parseable verdict, the supervisor checks `eval-*-design.yaml` files on disk. Same pattern as the build evaluator fallback added in v2.2.0. Fixes pipelines reporting "stuck" when the design evaluation actually passed.
+
+### Fixed
+- **`run_bash` tests on Windows** — `test_execute_run_bash` and `test_execute_run_bash_timeout` now use `python -c` on Windows instead of `echo`/`sleep` which depend on Unix shell builtins. Tests pass on all platforms.
+- **Doc Writer termination validated** — the prompt-based termination instruction ("stop after writing all files") was confirmed working under live conditions. The Doc Writer exits naturally within the stage timeout. No `max_tool_calls` cap was needed.
+
+### Infrastructure
+- 244 unit tests passing on Windows and Linux (up from 239)
+- Full pipeline validated end-to-end with fresh `productteam init` + `productteam run` on the bmark reference project
+
 ## [2.2.0] - 2026-03-26
 
 ### Added

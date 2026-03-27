@@ -15,7 +15,7 @@
   <rect width="1080" height="820" fill="#0e1117" rx="12"/>
 
   <!-- Title -->
-  <text x="540" y="40" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">ProductTeam v2.2.0 Architecture</text>
+  <text x="540" y="40" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="700" font-family="'SF Mono', 'Fira Code', monospace">ProductTeam v2.3.0 Architecture</text>
 
   <!-- ═══════════════════════════════════════════════════ -->
   <!-- USER INPUT layer -->
