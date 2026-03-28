@@ -110,11 +110,21 @@ class OpenAIProvider(LLMProvider):
 
         for tc in msg.get("tool_calls", []):
             import json
+            args = tc["function"].get("arguments", {})
+            if isinstance(args, str):
+                try:
+                    parsed_args = json.loads(args)
+                except (json.JSONDecodeError, ValueError):
+                    parsed_args = {"_raw_arguments": args}
+            elif isinstance(args, dict):
+                parsed_args = args
+            else:
+                parsed_args = {}
             content.append({
                 "type": "tool_use",
                 "id": tc["id"],
                 "name": tc["function"]["name"],
-                "input": json.loads(tc["function"]["arguments"]),
+                "input": parsed_args,
             })
 
         stop_reason = "tool_use" if msg.get("tool_calls") else "end_turn"

@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ProductTeam — Your AI product team. Describe what you want. Wake up to shipping code.</title>
-<meta name="description" content="Autonomous AI product development pipeline. PRD, plan, build, evaluate, document, ship. Eight agents, three human gates, any LLM provider.">
+<title>ProductTeam — Structured AI software delivery pipeline</title>
+<meta name="description" content="AI software delivery pipeline. PRD, sprint plan, build, evaluate, document. Supports Anthropic, OpenAI, Ollama, and Gemini.">
 <style>
   :root {
     --bg: #0e1117;
@@ -299,9 +299,9 @@
 <!-- Hero -->
 <section class="hero">
   <div class="container">
-    <h1>Your AI product team.<br>Describe what you want.<br>Wake up to shipping code.</h1>
-    <p class="tagline">Eight specialized agents. Three human approval gates. One CLI. The builder never grades its own work — a separate, skeptical evaluator does.</p>
-    <p class="sub-tagline">Standalone Python CLI. Any LLM provider. No Claude Code required.</p>
+    <h1>Structured AI software delivery pipeline.</h1>
+    <p class="tagline">Seven agents. Three human approval gates. One CLI. The builder never grades its own work — a separate, skeptical evaluator does.</p>
+    <p class="sub-tagline">Standalone Python CLI. Supports Anthropic, OpenAI, Ollama, and Gemini.</p>
     <div class="hero-code">
       <span class="muted">$</span> <span class="cmd">pip install productteam</span>
     </div>
@@ -323,17 +323,14 @@
 <section class="section">
   <div class="container">
     <div class="forge-hero">
-      <p class="section-label">The Headline Feature</p>
-      <h2>Forge: Phone to Product</h2>
-      <p>Start the daemon on your workstation. Open the dashboard on your phone. Type a product idea. Hit "Forge it." Go to bed. The pipeline runs headlessly — PRD, plan, build, evaluate, document. When a gate needs your approval, you get a Slack notification. Tap approve. Wake up to a built, tested, documented codebase.</p>
+      <p class="section-label">Batch Execution</p>
+      <h2>Forge: Local Job Queue + Dashboard</h2>
+      <p>Submit pipeline jobs from the CLI or dashboard. The daemon runs the full pipeline headlessly with auto-approve — PRD, plan, build, evaluate, document. Monitor progress and inspect logs from the dashboard. Remote gate approval is planned for a future release.</p>
       <p class="muted-text">Zero infrastructure. File-based queue. Python stdlib HTTP server. No React, no build step, no npm.</p>
       <div class="install-block" style="margin-top:24px;margin-bottom:0;background:rgba(0,0,0,0.3);">
-        <span class="comment"># Start the daemon + dashboard (localhost by default)</span><br>
-        <span class="cmd">productteam forge --listen --dashboard</span><br><br>
-        <span class="comment"># Or expose to your LAN for phone access</span><br>
-        <span class="cmd">productteam forge --listen --dashboard --lan</span><br>
-        <span class="comment"># Dashboard: http://localhost:7654</span><br>
-        <span class="comment"># From phone: http://192.168.1.42:7654</span>
+        <span class="comment"># Start the daemon + dashboard</span><br>
+        <span class="cmd">productteam forge --listen --dashboard</span><br>
+        <span class="comment"># Dashboard: http://localhost:7654</span>
       </div>
       <div class="forge-steps">
         <div class="forge-step">
@@ -629,7 +626,7 @@
       &nbsp;&middot;&nbsp;
       Built by Scott Converse
     </p>
-    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.5.7 &middot; Works with any LLM</p>
+    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.5.7 &middot; Alpha &middot; Supports Anthropic, OpenAI, Ollama, and Gemini adapters</p>
   </div>
 </footer>
 

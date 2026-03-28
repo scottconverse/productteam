@@ -38,7 +38,7 @@ class OllamaProvider(LLMProvider):
             "stream": False,
             "options": {"num_predict": max_tokens},
         }
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        async with httpx.AsyncClient(timeout=600.0) as client:
             resp = await client.post(
                 f"{self._host}/api/chat",
                 json=payload,
@@ -134,7 +134,7 @@ class OllamaProvider(LLMProvider):
             "tools": ollama_tools,
             "options": {"num_predict": max_tokens},
         }
-        async with httpx.AsyncClient(timeout=300.0) as client:
+        async with httpx.AsyncClient(timeout=600.0) as client:
             resp = await client.post(
                 f"{self._host}/api/chat",
                 json=payload,

@@ -7,10 +7,33 @@ containing job.json, gate.json (optional), and log.txt.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    """Write content to a file atomically via temp-file + rename.
+
+    Prevents corruption from concurrent reads or crashes mid-write.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        # os.replace is atomic on both POSIX and Windows (same filesystem)
+        os.replace(tmp, str(path))
+    except BaseException:
+        # Clean up temp file on any failure
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 class JobStatus(str, Enum):
@@ -157,9 +180,9 @@ class FileQueue:
         self._write_job(job)
 
     def set_gate(self, job_id: str, gate: GateInfo) -> None:
-        """Write a gate file for a job."""
+        """Write a gate file for a job atomically."""
         gate_path = self.queue_dir / job_id / "gate.json"
-        gate_path.write_text(json.dumps(gate.to_dict(), indent=2), encoding="utf-8")
+        _atomic_write(gate_path, json.dumps(gate.to_dict(), indent=2))
         self.update_status(job_id, JobStatus.WAITING_GATE, current_stage=gate.stage)
 
     def get_gate(self, job_id: str) -> GateInfo | None:
@@ -193,9 +216,6 @@ class FileQueue:
         return "\n".join(lines[-tail:])
 
     def _write_job(self, job: ForgeJob) -> None:
-        """Write job.json to disk."""
+        """Write job.json to disk atomically."""
         job_dir = self.queue_dir / job.job_id
-        job_dir.mkdir(parents=True, exist_ok=True)
-        (job_dir / "job.json").write_text(
-            json.dumps(job.to_dict(), indent=2), encoding="utf-8"
-        )
+        _atomic_write(job_dir / "job.json", json.dumps(job.to_dict(), indent=2))

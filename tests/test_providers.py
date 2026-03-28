@@ -425,6 +425,192 @@ async def test_openai_complete_with_tools(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# OpenAI defensive tool parsing tests (P1 #4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_openai_tool_args_as_dict(monkeypatch):
+    """OpenAI-compatible servers may return arguments as a dict, not string."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "choices": [{
+            "message": {
+                "content": None,
+                "tool_calls": [{
+                    "id": "call_dict",
+                    "type": "function",
+                    "function": {
+                        "name": "write_file",
+                        "arguments": {"path": "test.py", "content": "print()"},
+                    },
+                }],
+            },
+            "finish_reason": "tool_calls",
+        }]
+    }
+
+    with patch("productteam.providers.openai.httpx") as mock_httpx:
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.AsyncClient = MagicMock(return_value=mock_client)
+
+        p = get_provider(provider="openai")
+        result = await p.complete_with_tools(
+            system="test", messages=[{"role": "user", "content": "go"}],
+            tools=[{"name": "write_file", "input_schema": {"type": "object"}}],
+        )
+
+    block = result["content"][0]
+    assert block["input"] == {"path": "test.py", "content": "print()"}
+
+
+@pytest.mark.asyncio
+async def test_openai_tool_args_malformed_json(monkeypatch):
+    """Malformed JSON arguments should not crash — captured in _raw_arguments."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "choices": [{
+            "message": {
+                "content": None,
+                "tool_calls": [{
+                    "id": "call_bad",
+                    "type": "function",
+                    "function": {
+                        "name": "read_file",
+                        "arguments": "{broken json",
+                    },
+                }],
+            },
+            "finish_reason": "tool_calls",
+        }]
+    }
+
+    with patch("productteam.providers.openai.httpx") as mock_httpx:
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.AsyncClient = MagicMock(return_value=mock_client)
+
+        p = get_provider(provider="openai")
+        result = await p.complete_with_tools(
+            system="test", messages=[{"role": "user", "content": "go"}],
+            tools=[{"name": "read_file", "input_schema": {"type": "object"}}],
+        )
+
+    block = result["content"][0]
+    assert block["input"] == {"_raw_arguments": "{broken json"}
+
+
+@pytest.mark.asyncio
+async def test_openai_tool_args_missing(monkeypatch):
+    """Missing arguments field should default to empty dict."""
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "choices": [{
+            "message": {
+                "content": None,
+                "tool_calls": [{
+                    "id": "call_none",
+                    "type": "function",
+                    "function": {"name": "list_dir"},
+                }],
+            },
+            "finish_reason": "tool_calls",
+        }]
+    }
+
+    with patch("productteam.providers.openai.httpx") as mock_httpx:
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.AsyncClient = MagicMock(return_value=mock_client)
+
+        p = get_provider(provider="openai")
+        result = await p.complete_with_tools(
+            system="test", messages=[{"role": "user", "content": "go"}],
+            tools=[{"name": "list_dir", "input_schema": {"type": "object"}}],
+        )
+
+    block = result["content"][0]
+    assert block["input"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Gemini function response name test (P1 #5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_gemini_tool_result_uses_tool_name(monkeypatch):
+    """Gemini provider should use tool_name, not tool_use_id, in function responses."""
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {
+        "candidates": [{
+            "content": {
+                "parts": [{"text": "Done."}],
+            },
+        }],
+        "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5},
+    }
+
+    # Build messages that include a tool_result with both tool_use_id and tool_name
+    messages = [
+        {"role": "user", "content": "Read main.py"},
+        {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "toolu_abc123", "name": "read_file", "input": {"path": "main.py"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_abc123", "tool_name": "read_file", "content": "print('hi')"},
+        ]},
+    ]
+
+    with patch("productteam.providers.gemini.httpx") as mock_httpx:
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.AsyncClient = MagicMock(return_value=mock_client)
+
+        p = get_provider(provider="gemini")
+        result = await p.complete_with_tools(
+            system="test", messages=messages,
+            tools=[{"name": "read_file", "description": "Read", "input_schema": {"type": "object"}}],
+        )
+
+    # Verify the function response name in the request payload
+    call_args = mock_client.post.call_args
+    payload = call_args.kwargs.get("json") or call_args[1].get("json")
+    # Find the functionResponse in the sent contents
+    for content_block in payload["contents"]:
+        for part in content_block.get("parts", []):
+            if "functionResponse" in part:
+                assert part["functionResponse"]["name"] == "read_file", \
+                    f"Expected 'read_file', got '{part['functionResponse']['name']}'"
+                break
+
+
+# ---------------------------------------------------------------------------
 # model_id() tests
 # ---------------------------------------------------------------------------
 

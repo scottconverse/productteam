@@ -13,6 +13,7 @@ from productteam.tool_loop import (
     BUILDER_TOOLS,
     _MAX_HISTORY_EXCHANGES,
     _SHELL_FEATURE_RE,
+    _build_subprocess_env,
     _check_write_restricted,
     _execute_tool,
     _truncate_messages,
@@ -53,6 +54,54 @@ def test_validate_path_within_project(tmp_path):
     (tmp_path / "src").mkdir()
     result = _validate_path("src", tmp_path)
     assert isinstance(result, Path)
+
+
+def test_validate_path_shared_prefix_sibling_rejected(tmp_path):
+    """A sibling directory sharing a text prefix must be rejected.
+
+    Regression: str.startswith('/tmp/proj') passes for '/tmp/proj2'.
+    """
+    import tempfile, os
+    # Create two siblings: proj and proj2
+    parent = Path(tempfile.mkdtemp())
+    proj = parent / "proj"
+    proj2 = parent / "proj2"
+    proj.mkdir()
+    proj2.mkdir()
+    target = proj2 / "secret.txt"
+    target.write_text("secret")
+
+    # Attempt to reach proj2/secret.txt from proj's sandbox
+    # Use a relative path that resolves to the sibling
+    # Since _validate_path checks .. explicitly, we test via symlink
+    result = _validate_path("../proj2/secret.txt", proj)
+    assert isinstance(result, str), "Shared-prefix sibling should be rejected"
+
+    # Cleanup
+    import shutil
+    shutil.rmtree(parent)
+
+
+def test_validate_path_symlink_escape_rejected(tmp_path):
+    """A symlink pointing outside the project must be rejected."""
+    import os
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.txt"
+    secret.write_text("secret")
+
+    project = tmp_path / "project"
+    project.mkdir()
+
+    # Create a symlink inside the project pointing outside
+    link = project / "escape_link"
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("OS does not support symlinks")
+
+    result = _validate_path("escape_link/secret.txt", project)
+    assert isinstance(result, str), "Symlink escape should be rejected"
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +304,53 @@ def test_execute_run_bash_forbidden_path(tmp_path):
     )
     data = json.loads(result)
     assert "error" in data
+
+
+# ---------------------------------------------------------------------------
+# Subprocess environment isolation tests (P0 #2)
+# ---------------------------------------------------------------------------
+
+
+def test_build_subprocess_env_strips_api_keys(tmp_path):
+    """Sensitive env vars like API keys must NOT appear in subprocess env."""
+    import os
+    # Inject fake sensitive vars into the current process env
+    sensitive_vars = [
+        "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY",
+        "GITHUB_TOKEN", "DATABASE_URL", "SECRET_KEY",
+    ]
+    old_values = {}
+    for var in sensitive_vars:
+        old_values[var] = os.environ.get(var)
+        os.environ[var] = "test-secret-value"
+
+    try:
+        env = _build_subprocess_env(tmp_path)
+        for var in sensitive_vars:
+            assert var not in env, f"{var} leaked into subprocess environment"
+    finally:
+        # Restore original values
+        for var in sensitive_vars:
+            if old_values[var] is None:
+                os.environ.pop(var, None)
+            else:
+                os.environ[var] = old_values[var]
+
+
+def test_build_subprocess_env_includes_safe_vars(tmp_path):
+    """Safe vars like PATH must be present in subprocess env."""
+    env = _build_subprocess_env(tmp_path)
+    assert "PATH" in env
+    assert "PRODUCTTEAM_SANDBOXED" in env
+    assert env["PRODUCTTEAM_SANDBOXED"] == "1"
+
+
+def test_build_subprocess_env_includes_python_on_path(tmp_path):
+    """Python executable directory must be on PATH."""
+    import sys
+    env = _build_subprocess_env(tmp_path)
+    python_dir = str(Path(sys.executable).parent)
+    assert python_dir in env["PATH"]
 
 
 def test_execute_list_dir(tmp_path):

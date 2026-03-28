@@ -78,7 +78,8 @@ class ForgeDaemon:
             await self._notify(job, "job_failed", str(e))
             return
 
-        # Run supervisor with auto-approve
+        # Forge runs as a local batch runner with auto-approve.
+        # Remote gate approval (pause + resume) is planned for a future release.
         supervisor = Supervisor(
             project_dir=project_dir,
             config=self.config,

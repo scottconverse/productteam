@@ -27,6 +27,7 @@ class PipelineConfig(BaseModel):
     quality: str = "standard"  # "standard" | "thorough" | "strict"
     auto_approve: bool = False
     budget_usd: float = 2.0  # Kill pipeline if estimated cost exceeds this
+    auto_install_deps: bool = False  # Auto pip install project deps (runs arbitrary install-time code)
 
 
 class GatesConfig(BaseModel):

@@ -9,6 +9,7 @@ Accessible from any device on your local network when bound to 0.0.0.0
 from __future__ import annotations
 
 import json
+import secrets
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from threading import Thread
@@ -180,8 +181,27 @@ class DashboardHandler(BaseHTTPRequestHandler):
     """HTTP handler for the Forge dashboard."""
 
     queue: FileQueue  # Set by serve_dashboard
+    auth_token: str = ""  # Set by serve_dashboard; empty = no auth
+
+    def _check_auth(self) -> bool:
+        """Check token auth. Returns True if authorized."""
+        if not self.auth_token:
+            return True  # No auth required (localhost)
+        # Accept token as ?token= query param or Authorization: Bearer header
+        from urllib.parse import urlparse, parse_qs
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        if params.get("token", [None])[0] == self.auth_token:
+            return True
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header == f"Bearer {self.auth_token}":
+            return True
+        self._respond(401, "application/json", '{"error":"unauthorized"}')
+        return False
 
     def do_GET(self) -> None:
+        if not self._check_auth():
+            return
         if self.path == "/" or self.path == "/index.html":
             self._respond(200, "text/html", _DASHBOARD_HTML)
         elif self.path == "/api/jobs":
@@ -196,6 +216,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._respond(404, "text/plain", "Not found")
 
     def do_POST(self) -> None:
+        if not self._check_auth():
+            return
         if self.path == "/api/submit":
             MAX_BODY = 4096
             try:
@@ -236,7 +258,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _respond(self, code: int, content_type: str, body: str) -> None:
         self.send_response(code)
         self.send_header("Content-Type", content_type)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        # Restrict CORS to same-origin when auth is enabled
+        if not self.auth_token:
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body.encode("utf-8"))
 
@@ -256,9 +280,34 @@ def serve_dashboard(
         port: Port to listen on (default: 7654).
         host: Host to bind to. '0.0.0.0' = accessible from LAN.
               '127.0.0.1' = localhost only.
+
+    When bound to a non-localhost address, a random auth token is generated
+    and printed to the console. Clients must pass it as ?token= or
+    Authorization: Bearer header.
+
+    Returns:
+        The HTTPServer instance (also has .auth_token attribute if set).
     """
     DashboardHandler.queue = queue
+
+    # Require auth when exposed beyond localhost
+    is_lan = host not in ("127.0.0.1", "localhost", "::1")
+    if is_lan:
+        token = secrets.token_urlsafe(32)
+        DashboardHandler.auth_token = token
+    else:
+        token = ""
+        DashboardHandler.auth_token = ""
+
     server = HTTPServer((host, port), DashboardHandler)
+    server.auth_token = token  # type: ignore[attr-defined]
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
+
+    if token:
+        import logging
+        logging.getLogger(__name__).info(
+            "Dashboard auth token (required for LAN access): %s", token
+        )
+
     return server

@@ -83,7 +83,11 @@ BUILDER_TOOLS = [
 ]
 
 
-# Shell metacharacter pattern — commands matching this need shell=True
+# Shell metacharacter pattern — commands matching this need shell=True.
+# NOTE: shell=True is a deliberate fallback for commands that use pipes,
+# redirects, or other shell features. This widens the attack surface but
+# is required for builder agents that chain commands. The command denylist
+# (_validate_command) provides defense-in-depth but is not a hard boundary.
 _SHELL_FEATURE_RE = re.compile(r"[|><;]|&&|\|\||`|\$\(")
 
 
@@ -106,8 +110,12 @@ def _validate_path(path_str: str, project_dir: Path) -> Path | str:
     if ".." in Path(path_str).parts:
         return f"Path traversal not allowed: {path_str}"
 
+    root = project_dir.resolve()
     resolved = (project_dir / path_str).resolve()
-    if not str(resolved).startswith(str(project_dir.resolve())):
+
+    try:
+        resolved.relative_to(root)
+    except ValueError:
         return f"Path escapes project directory: {path_str}"
 
     return resolved
@@ -193,6 +201,41 @@ def _validate_command(command: str) -> str | None:
     return None
 
 
+# Allowlist of environment variables safe to pass to builder subprocesses.
+# Everything else (API keys, tokens, credentials) is stripped.
+_SAFE_ENV_KEYS = (
+    "PATH", "HOME", "USER", "USERNAME", "LOGNAME",
+    "TMP", "TEMP", "TMPDIR",
+    "SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC",      # Windows essentials
+    "LANG", "LC_ALL", "LC_CTYPE",                 # Locale
+    "TERM",                                        # Terminal type
+)
+
+
+def _build_subprocess_env(project_dir: Path) -> dict[str, str]:
+    """Build a minimal environment for builder subprocesses.
+
+    Only safe variables are forwarded. API keys, tokens, and credentials
+    are stripped. Python and any project venv are added to PATH.
+    """
+    safe_env: dict[str, str] = {}
+    for key in _SAFE_ENV_KEYS:
+        if key in os.environ:
+            safe_env[key] = os.environ[key]
+
+    # Ensure Python is on PATH
+    python_dir = str(Path(sys.executable).parent)
+    safe_env["PATH"] = python_dir + os.pathsep + safe_env.get("PATH", "")
+
+    # Add project venv to PATH if it exists
+    venv_scripts = project_dir / ".venv" / ("Scripts" if os.name == "nt" else "bin")
+    if venv_scripts.exists():
+        safe_env["PATH"] = str(venv_scripts) + os.pathsep + safe_env["PATH"]
+
+    safe_env["PRODUCTTEAM_SANDBOXED"] = "1"
+    return safe_env
+
+
 def _execute_tool(
     tool_name: str,
     tool_input: dict,
@@ -249,13 +292,7 @@ def _execute_tool(
         if cmd_error:
             return json.dumps({"error": cmd_error})
         try:
-            # Ensure Python is on PATH for the subprocess.
-            env = os.environ.copy()
-            python_dir = str(Path(sys.executable).parent)
-            env["PATH"] = python_dir + os.pathsep + env.get("PATH", "")
-            venv_scripts = project_dir / ".venv" / ("Scripts" if os.name == "nt" else "bin")
-            if venv_scripts.exists():
-                env["PATH"] = str(venv_scripts) + os.pathsep + env["PATH"]
+            env = _build_subprocess_env(project_dir)
 
             # Default to shell=False for security. Fall back to shell=True
             # only when the command uses shell features that require it.
@@ -513,6 +550,7 @@ async def _run_tool_loop_inner(
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tool_id,
+                "tool_name": tool_name,
                 "content": result_text,
             })
 

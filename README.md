@@ -1,8 +1,8 @@
 # ProductTeam
 
-**Your AI product team. Describe what you want. Wake up to shipping code.**
+**A structured AI software delivery pipeline for small projects.**
 
-ProductTeam is an autonomous software delivery pipeline. You describe a product concept in plain English. Eight specialized AI agents write the PRD, plan the sprints, build the code, evaluate the results, write the docs, and ship — with three human approval gates where you confirm intent, scope, and readiness.
+ProductTeam turns a product concept into a PRD, sprint plan, implementation passes, evaluation passes, and documentation. It is designed for supervised use, with state persistence, recovery tools, and optional approval gates. You describe a concept in plain English. Seven AI agents handle the stages — with three human approval gates where you confirm intent, scope, and readiness.
 
 The builder never grades its own work. A separate, skeptical evaluator reads the code, runs the tests, and tries to break things. Code ships only when the evaluator says PASS — not when the builder says "done."
 
@@ -10,7 +10,7 @@ The builder never grades its own work. A separate, skeptical evaluator reads the
 pip install productteam
 ```
 
-Works with **Anthropic Claude**, **OpenAI**, **Ollama** (free, local), **Google Gemini**, **LM Studio**, and **vLLM**. No vendor lock-in. No Claude Code required.
+Supports **Anthropic Claude**, **OpenAI**, **Ollama** (free, local), and **Google Gemini** through provider adapters. OpenAI-compatible local servers (LM Studio, vLLM) may work but depend on how closely they match the expected tool-calling API shapes.
 
 ![Tests](https://github.com/scottconverse/productteam/actions/workflows/test.yml/badge.svg)
 ![PyPI](https://img.shields.io/pypi/v/productteam)
@@ -19,23 +19,22 @@ Works with **Anthropic Claude**, **OpenAI**, **Ollama** (free, local), **Google 
 
 ---
 
-## Forge: Submit From Your Phone, Ship While You Sleep
+## Forge: Local Job Queue and Dashboard
 
-**This is the headline feature.** Start the Forge daemon on your workstation. Open the dashboard on your phone. Type a product idea. Hit "Forge it." Go to bed.
+Forge is a file-backed local job queue with a lightweight dashboard. Submit pipeline jobs from the CLI or dashboard, monitor progress, and inspect logs.
 
-The daemon runs the full pipeline headlessly — PRD, plan, build, evaluate, document. When a gate needs your approval, you get a Slack notification (or webhook). Tap approve on your phone. The pipeline continues. You wake up to a built, tested, documented codebase.
+The daemon runs the full pipeline headlessly with auto-approve — PRD, plan, build, evaluate, document. Gates are bypassed in the current daemon path. Forge is best understood as a local batch runner and status UI, not a remote approval system. Remote gate approval is planned for a future release.
 
 ```bash
 # Start the daemon + dashboard
-productteam forge --listen --dashboard --lan
+productteam forge --listen --dashboard
 
 # Dashboard: http://localhost:7654
-# From phone: http://192.168.1.42:7654
 ```
 
-Three ways to submit ideas: your phone's browser, the CLI (`productteam forge "idea"`), or a GitHub Issue with the `productteam-forge` label.
+Two ways to submit ideas: the dashboard UI or the CLI (`productteam forge "idea"`).
 
-The dashboard is a zero-dependency single-page app served by Python's stdlib — no React, no build step, no npm. It shows job status, live log tailing, and approve/reject buttons for every gate.
+The dashboard is a zero-dependency single-page app served by Python's stdlib — no React, no build step, no npm. It shows job status, live log tailing, and job results.
 
 ---
 
@@ -147,9 +146,9 @@ ProductTeam runs LLM-generated shell commands on your machine. That's inherently
 
 **Path validation** — All file operations are locked to the project directory. No `../` traversal, no absolute paths.
 
-**Credential isolation** — Sensitive environment variables (`*_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `AWS_*`) are stripped from the subprocess environment before commands run. The Builder cannot read your API keys.
+**Environment isolation** — Builder subprocesses receive a minimal allowlisted environment (PATH, HOME, TMP, locale). API keys, tokens, and credentials from the parent process are not forwarded. A `PRODUCTTEAM_SANDBOXED=1` marker is set.
 
-**Command filtering** — Known credential-adjacent paths (`.ssh/`, `.aws/`, `/proc/environ`) are blocked.
+**Command filtering** — Known credential-adjacent paths (`.ssh/`, `.aws/`, `/proc/environ`) are blocked. Note: `run_bash` falls back to `shell=True` when commands use pipes, redirects, or other shell features. This is a convenience tradeoff — the command denylist provides defense-in-depth but is not a hard sandbox boundary.
 
 **Loop detection** — If the LLM calls the same tool with identical arguments three consecutive times, the loop breaks automatically.
 
@@ -177,10 +176,9 @@ ProductTeam runs LLM-generated shell commands on your machine. That's inherently
 | `productteam config set KEY VALUE` | Set configuration |
 | `productteam test` | Run the test suite |
 | `productteam test --live` | Run live integration tests |
-| `productteam forge "idea"` | Submit an idea to Forge |
-| `productteam forge --listen --dashboard` | Start the Forge daemon |
+| `productteam forge "idea"` | Submit an idea to the Forge queue |
+| `productteam forge --listen --dashboard` | Start the Forge daemon + dashboard |
 | `productteam forge status [JOB-ID]` | Check job status |
-| `productteam forge approve JOB-ID` | Approve a gate |
 
 ---
 
@@ -239,6 +237,7 @@ quality = "standard"            # standard | thorough | strict (controls eval de
 builder_max_tool_calls = 75     # tool call limit per doer run
 budget_usd = 2.00               # cost circuit breaker (kills pipeline if exceeded)
 auto_approve = false            # true for headless/CI mode
+auto_install_deps = false       # auto pip install project deps (runs install-time code)
 
 [gates]
 prd_approval = true
@@ -246,8 +245,8 @@ sprint_approval = true
 ship_approval = true
 
 [forge]
-queue_backend = "file"          # file | github_issues
-notification_backend = "none"   # none | webhook | slack
+queue_backend = "file"          # file-backed local queue
+notification_backend = "none"   # none | webhook
 status_host = "127.0.0.1"      # default: localhost only
 status_port = 7654
 ```
@@ -268,9 +267,9 @@ status_port = 7654
 
 This is not an IDE plugin. It's not autocomplete. It's not a chatbot you pair-program with.
 
-This is an autonomous pipeline that runs in the background and produces a project directory with code, tests, and documentation. You interact at three gates. Everything else is automatic.
+This is a supervised pipeline that produces a project directory with code, tests, and documentation. You interact at three gates in interactive mode, or run headlessly with `--auto-approve`. Human review of output is expected.
 
-For small-to-medium projects (1-10 files per sprint, up to 8 sprints), it works well today. For large enterprise codebases with 30+ existing modules, you'll want to wait for the vector search integration in v3.
+Best suited today for small greenfield projects and tightly scoped feature work (1-10 files per sprint, up to 8 sprints) where shell execution inside the project directory is acceptable.
 
 ---
 

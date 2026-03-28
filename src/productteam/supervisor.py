@@ -308,7 +308,14 @@ class Supervisor:
         dependencies — that wastes tool calls. This method does it for them.
         Does not raise — failures are logged but do not stop the pipeline,
         since the project may not have installable dependencies yet.
+
+        Gated behind config.pipeline.auto_install_deps (default: False).
+        Auto-installing runs arbitrary install-time code from the target
+        project — only enable this for projects you trust.
         """
+        if not self.config.pipeline.auto_install_deps:
+            return
+
         import subprocess
         import sys
 

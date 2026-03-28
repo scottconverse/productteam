@@ -92,7 +92,7 @@ class GeminiProvider(LLMProvider):
                     elif block.get("type") == "tool_result":
                         parts.append({
                             "functionResponse": {
-                                "name": block.get("tool_use_id", "unknown"),
+                                "name": block.get("tool_name", block.get("tool_use_id", "unknown")),
                                 "response": {"result": block.get("content", "")},
                             }
                         })
