@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.9] - 2026-03-27
+
+### Fixed
+- Add requirements-dev.txt for zip/auditor workflows (tomli_w collection failure)
+- Add conftest.py dependency guard with clear error message
+- Update CONTRIBUTING.md with zip reviewer instructions
+
 ## [2.5.8] - 2026-03-27
 
 ### Security
