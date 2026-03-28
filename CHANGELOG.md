@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.12] - 2026-03-27
+
+### Fixed
+- Fix all async mock warnings in test_supervisor.py (was 59 warnings, now 0)
+- Replace bare AsyncMock() with spec-constrained _mock_provider() helper
+- 344 passed, 0 skipped, 0 warnings
+
 ## [2.5.11] - 2026-03-27
 
 ### Fixed

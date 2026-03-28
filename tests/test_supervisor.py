@@ -57,6 +57,20 @@ def _init_project(tmp_path: Path) -> None:
         )
 
 
+def _mock_provider() -> AsyncMock:
+    """Create a mock LLM provider with sync methods set correctly.
+
+    Uses spec=LLMProvider so only real methods are mocked.
+    This prevents 'coroutine never awaited' warnings from auto-generated
+    async attributes that get garbage-collected without being called.
+    """
+    from productteam.providers.base import LLMProvider
+    provider = AsyncMock(spec=LLMProvider)
+    provider.model_id = MagicMock(return_value="test-model")
+    provider.name = MagicMock(return_value="mock")
+    return provider
+
+
 # ---------------------------------------------------------------------------
 # State management tests
 # ---------------------------------------------------------------------------
@@ -96,7 +110,7 @@ async def test_supervisor_dry_run(tmp_path):
     """Dry run shows stages without calling LLM."""
     _init_project(tmp_path)
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     result = await supervisor.run(concept="test app", dry_run=True)
@@ -116,7 +130,7 @@ async def test_supervisor_prd_stage(tmp_path):
     _init_project(tmp_path)
     config = _make_config()
 
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     mock_provider.complete = AsyncMock(return_value=("# PRD\n\nThis is the PRD.", {"input_tokens": 0, "output_tokens": 0}))
     mock_provider.complete_with_tools = AsyncMock()
 
@@ -147,7 +161,7 @@ async def test_supervisor_thinker_timeout(tmp_path):
         await asyncio.sleep(10)
         return "too slow"
 
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     mock_provider.complete = slow_complete
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
@@ -183,7 +197,7 @@ async def test_build_evaluate_pass_loop1(tmp_path):
     )
 
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     # Both builder and evaluator go through complete_with_tools (tool loop).
     # Builder completes first, then evaluator returns PASS verdict.
@@ -207,7 +221,7 @@ async def test_build_evaluate_needs_work_then_pass(tmp_path):
     )
 
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     # Loop 1: builder → evaluator(NEEDS_WORK), Loop 2: builder → evaluator(PASS)
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
@@ -233,7 +247,7 @@ async def test_build_evaluate_fail_on_verdict(tmp_path):
     )
 
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
         _eval_response("Built."),
@@ -260,7 +274,7 @@ async def test_build_evaluate_max_loops_exhausted(tmp_path):
         "builder_max_tool_calls": 5, "auto_approve": False,
     })
 
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     # 2 loops: builder + evaluator(NEEDS_WORK) each
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
         _eval_response("Built."),
@@ -296,7 +310,7 @@ async def test_build_evaluate_skips_eval_when_disabled(tmp_path):
         "require_evaluator": False,
     })
 
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     # Builder completes — evaluator should never be called
     mock_provider.complete_with_tools = AsyncMock(return_value={
         "role": "assistant",
@@ -322,7 +336,7 @@ async def test_gate_auto_approve(tmp_path):
     """Gate returns True immediately with auto_approve."""
     _init_project(tmp_path)
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     approved = await supervisor._gate("Test Gate", "")
@@ -339,7 +353,7 @@ def test_parse_verdict_pass(tmp_path):
     """Parses PASS verdict correctly."""
     _init_project(tmp_path)
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     supervisor = Supervisor(tmp_path, config, mock_provider)
 
     assert supervisor._parse_verdict("evaluator_verdict: PASS") == "pass"
@@ -350,7 +364,7 @@ def test_parse_verdict_needs_work(tmp_path):
     """Parses NEEDS_WORK verdict correctly."""
     _init_project(tmp_path)
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     supervisor = Supervisor(tmp_path, config, mock_provider)
 
     assert supervisor._parse_verdict("evaluator_verdict: NEEDS_WORK") == "needs_work"
@@ -360,7 +374,7 @@ def test_parse_verdict_fail(tmp_path):
     """Parses FAIL verdict correctly."""
     _init_project(tmp_path)
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     supervisor = Supervisor(tmp_path, config, mock_provider)
 
     assert supervisor._parse_verdict("evaluator_verdict: FAIL") == "fail"
@@ -370,7 +384,7 @@ def test_parse_verdict_yaml_structured(tmp_path):
     """Parses verdict from structured YAML response."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
 
     yaml_response = (
         "sprint: 1\n"
@@ -386,7 +400,7 @@ def test_parse_verdict_no_false_positive_on_narrative(tmp_path):
     """Verdict parser does not misfire on 'pass' in narrative text."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
 
     # Old parser would match "pass" in the narrative and return "pass"
     tricky = (
@@ -401,7 +415,7 @@ def test_parse_verdict_defaults_to_needs_work(tmp_path):
     """Verdict parser returns needs_work when no verdict found."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
 
     assert supervisor._parse_verdict("No structured output at all.") == "needs_work"
 
@@ -428,7 +442,7 @@ async def test_build_evaluate_disk_fallback_finds_pass(tmp_path):
     )
 
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     # Builder text-only response, then evaluator text with NO parseable verdict
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
@@ -470,7 +484,7 @@ async def test_disk_fallback_does_not_cross_sprint_boundaries(tmp_path):
     # Sprint-002 has NO eval file on disk — evaluator only wrote narrative text
 
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     # Builder and evaluator both return text-only (no tool calls, no verdict key)
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
@@ -506,7 +520,7 @@ def test_summarize_eval_feedback_extracts_failures(tmp_path):
     """Summarizer extracts FAIL criteria and CRITICAL/HIGH/MEDIUM findings."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
 
     yaml_eval = (
         "evaluator_verdict: NEEDS_WORK\n"
@@ -543,7 +557,7 @@ def test_summarize_eval_feedback_fallback_on_plain_text(tmp_path):
     """Summarizer falls back to truncation for non-YAML responses."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
 
     plain = "This is not YAML, just a plain text evaluator response. " * 100
     result = supervisor._summarize_eval_feedback(plain, 2)
@@ -609,7 +623,7 @@ async def test_full_pipeline_two_sprints(tmp_path):
         "require_design_review": True,
     })
 
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     # Thinker stages use provider.complete:
     #   1. PRD only (Planner is now a doer)
@@ -658,7 +672,7 @@ async def test_full_pipeline_sprint_fails_stops_pipeline(tmp_path):
         "auto_approve": False,
         "require_design_review": False,
     })
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     mock_provider.complete = AsyncMock(return_value=("# PRD\nA tool.", {"input_tokens": 0, "output_tokens": 0}))
 
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
@@ -679,7 +693,7 @@ async def test_full_pipeline_no_concept_fails(tmp_path):
     """Pipeline fails immediately when no concept is provided and none in state."""
     _init_project(tmp_path)
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     result = await supervisor.run(concept="")
@@ -724,7 +738,7 @@ async def test_full_pipeline_resume_skips_completed(tmp_path):
         "require_design_review": False,
     })
 
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     # PRD and Plan should NOT be called — only build/eval + document
     mock_provider.complete = AsyncMock()  # should not be called
 
@@ -757,7 +771,7 @@ async def test_multi_sprint_sequencing(tmp_path):
     (sprints_dir / "sprint-002.yaml").write_text("sprint: 2\ntitle: Second\n")
 
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     # Track which sprint contracts were seen
     seen_sprints = []
@@ -790,7 +804,7 @@ async def test_planner_doer_writes_yaml_files(tmp_path):
     (tmp_path / ".productteam" / "sprints").mkdir(parents=True, exist_ok=True)
 
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
         {"role": "assistant", "content": [{"type": "tool_use", "id": "t1",
             "name": "write_file",
@@ -827,7 +841,7 @@ async def test_pipeline_fails_when_no_sprints_after_plan(tmp_path):
         "builder_timeout_seconds": 30, "builder_max_tool_calls": 5,
         "auto_approve": False, "require_design_review": False,
     })
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     mock_provider.complete = AsyncMock(return_value=("# PRD\nA CLI tool.", {"input_tokens": 0, "output_tokens": 0}))
     # Planner completes but writes no YAML files
     mock_provider.complete_with_tools = AsyncMock(return_value={
@@ -859,7 +873,7 @@ async def test_doc_writer_skipped_when_no_sprints_passed(tmp_path):
         "builder_timeout_seconds": 30, "builder_max_tool_calls": 5,
         "auto_approve": False, "require_design_review": False,
     })
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     mock_provider.complete = AsyncMock(return_value=("# PRD\nA tool.", {"input_tokens": 0, "output_tokens": 0}))
 
     # Planner writes no new files (sprint-001 already exists)
@@ -902,7 +916,7 @@ async def test_planner_uses_planner_timeout(tmp_path):
         "builder_max_tool_calls": 5,
         "max_loops": 1, "auto_approve": False,
     })
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     mock_provider.complete_with_tools = AsyncMock(return_value={
         "role": "assistant",
         "content": [{"type": "text", "text": "Done."}],
@@ -945,7 +959,7 @@ async def test_design_eval_disk_fallback_finds_pass(tmp_path):
         "auto_approve": False,
         "require_design_review": True,
     })
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
 
@@ -991,7 +1005,7 @@ async def test_stage_callback_called_during_pipeline(tmp_path):
     """stage_callback fires for each stage in the pipeline."""
     _init_project(tmp_path)
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     mock_provider.complete = AsyncMock(return_value=("PRD content here.", {"input_tokens": 0, "output_tokens": 0}))
 
     stages_seen: list[str] = []
@@ -1031,7 +1045,7 @@ def test_find_sprints_no_dir(tmp_path):
     """_find_sprints returns empty list when sprints dir doesn't exist."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     # Remove the sprints directory
     import shutil
     shutil.rmtree(tmp_path / ".productteam" / "sprints")
@@ -1042,7 +1056,7 @@ def test_find_sprints_with_yaml(tmp_path):
     """_find_sprints finds YAML files in sprints directory."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     sprints_dir = tmp_path / ".productteam" / "sprints"
     (sprints_dir / "sprint-001.yaml").write_text("sprint: 1")
     (sprints_dir / "sprint-002.yml").write_text("sprint: 2")
@@ -1055,7 +1069,7 @@ def test_write_artifact_prd(tmp_path):
     """_write_artifact writes PRD to correct path."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     path = supervisor._write_artifact(PipelineStage.PRD, "# PRD content")
     assert "prds" in path
     assert (tmp_path / path).read_text() == "# PRD content"
@@ -1065,7 +1079,7 @@ def test_write_artifact_plan(tmp_path):
     """_write_artifact writes plan to correct path."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     path = supervisor._write_artifact(PipelineStage.PLAN, "plan text")
     assert "plan.md" in path
 
@@ -1074,7 +1088,7 @@ def test_write_artifact_evaluate(tmp_path):
     """_write_artifact writes evaluation to correct path."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     path = supervisor._write_artifact(PipelineStage.EVALUATE, "eval: pass")
     assert "evaluations" in path
 
@@ -1083,7 +1097,7 @@ def test_write_artifact_unknown_stage(tmp_path):
     """_write_artifact handles stages without specific paths."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     path = supervisor._write_artifact(PipelineStage.EVALUATE_DESIGN, "design eval")
     assert "evaluate-design-output.md" in path
 
@@ -1092,7 +1106,7 @@ def test_read_artifact_no_path(tmp_path):
     """_read_artifact returns empty string when no artifact path recorded."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     supervisor.state["stages"]["prd"] = {"status": "complete"}  # no artifact key
     result = supervisor._read_artifact("prd")
     assert result == ""
@@ -1102,7 +1116,7 @@ def test_read_artifact_missing_file(tmp_path):
     """_read_artifact returns empty string when artifact file is missing."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     supervisor.state["stages"]["prd"] = {
         "status": "complete",
         "artifact": ".productteam/prds/prd-v1.md",
@@ -1115,7 +1129,7 @@ def test_read_artifact_success(tmp_path):
     """_read_artifact reads existing artifact file."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     prd_dir = tmp_path / ".productteam" / "prds"
     prd_dir.mkdir(parents=True)
     (prd_dir / "prd-v1.md").write_text("# My PRD")
@@ -1131,7 +1145,7 @@ def test_summarize_eval_feedback_structured(tmp_path):
     """_summarize_eval_feedback extracts findings from YAML."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     eval_yaml = (
         "evaluator_verdict: NEEDS_WORK\n"
         "acceptance_criteria:\n"
@@ -1161,7 +1175,7 @@ def test_summarize_eval_feedback_fallback(tmp_path):
     """_summarize_eval_feedback truncates non-YAML response."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     result = supervisor._summarize_eval_feedback("Just a plain text response.", 2)
     assert "loop 2" in result
     assert "Just a plain text" in result
@@ -1171,7 +1185,7 @@ def test_parse_verdict_yaml_error(tmp_path):
     """_parse_verdict handles malformed YAML gracefully."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     # Malformed YAML that will cause parse error
     result = supervisor._parse_verdict("evaluator_verdict: PASS\n  bad indent: [")
     # Should still find PASS via line scan fallback
@@ -1182,7 +1196,7 @@ def test_parse_verdict_line_scan_fail(tmp_path):
     """_parse_verdict line scan catches 'fail' on verdict lines."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock())
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
     assert supervisor._parse_verdict("verdict: FAIL\nSome details.") == "fail"
 
 
@@ -1191,7 +1205,7 @@ async def test_build_loop_missing_sprint_contract(tmp_path):
     """_build_evaluate_loop returns failed when sprint contract is missing."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock(), auto_approve=True)
+    supervisor = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
     result = await supervisor._build_evaluate_loop("sprint-nonexistent")
     assert result.status == "failed"
     assert "not found" in result.error
@@ -1208,7 +1222,7 @@ async def test_build_loop_skill_not_found(tmp_path):
     shutil.rmtree(tmp_path / ".claude" / "skills" / "builder")
 
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     supervisor = Supervisor(tmp_path, config, mock_provider, auto_approve=True)
     result = await supervisor._build_evaluate_loop("sprint-001")
     assert result.status == "failed"
@@ -1220,7 +1234,7 @@ async def test_run_no_concept_fails(tmp_path):
     """run() with no concept and no saved concept returns failed."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock(), auto_approve=True)
+    supervisor = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
     result = await supervisor.run()
     assert result.status == "failed"
 
@@ -1230,7 +1244,7 @@ async def test_thinker_stage_skill_not_found(tmp_path):
     """_run_thinker_stage returns failed when skill file is missing."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock(), auto_approve=True)
+    supervisor = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
     result = await supervisor._run_thinker_stage(
         PipelineStage.PRD, "nonexistent-skill", "test"
     )
@@ -1243,7 +1257,7 @@ async def test_tool_loop_stage_skill_not_found(tmp_path):
     """_run_tool_loop_stage returns failed when skill file is missing."""
     _init_project(tmp_path)
     config = _make_config()
-    supervisor = Supervisor(tmp_path, config, AsyncMock(), auto_approve=True)
+    supervisor = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
     result = await supervisor._run_tool_loop_stage(
         PipelineStage.PLAN, "nonexistent-skill", "test"
     )
@@ -1306,7 +1320,7 @@ async def test_build_evaluate_loop_accumulates_tokens(tmp_path):
         "sprint: 1\ntitle: Test\n"
     )
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     # Builder returns 5000 input / 500 output, evaluator returns 3000 / 200
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
@@ -1330,7 +1344,7 @@ async def test_build_evaluate_loop_tokens_on_fail(tmp_path):
         "sprint: 1\ntitle: Test\n"
     )
     config = _make_config()
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
 
     mock_provider.complete_with_tools = AsyncMock(side_effect=[
         _eval_response_with_usage("Built.", 4000, 400),
@@ -1356,7 +1370,7 @@ async def test_design_eval_prompt_includes_quality_level(tmp_path):
         "builder_max_tool_calls": 5, "auto_approve": False,
         "quality": "standard",
     })
-    mock_provider = AsyncMock()
+    mock_provider = _mock_provider()
     captured_messages = []
 
     async def capture_cwt(system, messages, tools, **kwargs):
