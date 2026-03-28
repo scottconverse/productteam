@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.5.10] - 2026-03-27
+
+### Fixed
+- Rework symlink escape test to use mock (was skipped on Windows). 344 passed, 0 skipped.
+
 ## [2.5.9] - 2026-03-27
 
 ### Fixed
