@@ -300,7 +300,7 @@
 <section class="hero">
   <div class="container">
     <h1>Structured AI software delivery pipeline.</h1>
-    <p class="tagline">Seven agents. Three human approval gates. One CLI. The builder never grades its own work — a separate, skeptical evaluator does.</p>
+    <p class="tagline">Seven agents. Optional human approval gates. One CLI. The builder never grades its own work — a separate, skeptical evaluator does.</p>
     <p class="sub-tagline">Standalone Python CLI. Supports Anthropic, OpenAI, Ollama, and Gemini.</p>
     <div class="hero-code">
       <span class="muted">$</span> <span class="cmd">pip install productteam</span>
@@ -392,7 +392,7 @@
   <div class="container">
     <p class="section-label">The Pipeline</p>
     <h2 class="section-title">From idea to shipped product</h2>
-    <p class="section-desc">Eight specialized agents pass structured artifacts through a pipeline with three human approval gates.</p>
+    <p class="section-desc">Seven specialized agents pass structured artifacts through a pipeline. In interactive mode, three human approval gates let you confirm intent, scope, and readiness.</p>
     <div class="pipeline-flow">
       <div class="pipeline-step">
         <div class="step-name">PRD Writer</div>
@@ -436,8 +436,8 @@
 <section class="section">
   <div class="container">
     <p class="section-label">Human in the Loop</p>
-    <h2 class="section-title">Three approval gates</h2>
-    <p class="section-desc">The pipeline runs automatically between gates. You stop exactly three times to confirm intent, scope, and readiness to ship.</p>
+    <h2 class="section-title">Three approval gates (interactive mode)</h2>
+    <p class="section-desc">In interactive mode (<code>productteam run</code>), the pipeline pauses at three gates so you can confirm intent, scope, and readiness. In headless mode (<code>--auto-approve</code>) and Forge, gates are bypassed.</p>
     <div class="gates">
       <div class="gate-card">
         <div class="gate-number">Gate 1</div>
@@ -542,7 +542,7 @@
       <div class="skill-card">
         <div class="card-name">orchestrator</div>
         <div class="card-role">Project Manager</div>
-        <div class="card-desc">Routes work between agents, manages build-evaluate loops (max 3), enforces approval gates, writes handoff artifacts.</div>
+        <div class="card-desc">Routes work between agents, manages build-evaluate loops (max 3), handles approval gates in interactive mode, writes handoff artifacts.</div>
       </div>
     </div>
   </div>
@@ -602,7 +602,7 @@
       </div>
       <div class="guarantee-card">
         <h4>Small product teams</h4>
-        <p>You want PRD &rarr; Sprint &rarr; Build &rarr; Evaluate &rarr; Document &rarr; Ship with human gates at every strategic decision point. ProductTeam encodes a software delivery doctrine you can trust.</p>
+        <p>You want PRD &rarr; Sprint &rarr; Build &rarr; Evaluate &rarr; Document &rarr; Ship with optional human gates at strategic decision points. ProductTeam encodes a software delivery pipeline you can configure to your trust level.</p>
       </div>
       <div class="guarantee-card">
         <h4>Anyone tired of AI that grades its own homework</h4>
