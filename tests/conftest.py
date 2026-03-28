@@ -3,9 +3,29 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Dependency check — fail fast with a helpful message instead of cryptic
+# ImportErrors scattered across 300+ tests.
+# ---------------------------------------------------------------------------
+_REQUIRED = ["tomli_w", "pydantic", "rich", "yaml", "httpx", "anthropic", "typer"]
+_missing = []
+for _mod in _REQUIRED:
+    try:
+        __import__(_mod)
+    except ImportError:
+        _missing.append(_mod)
+if _missing:
+    sys.exit(
+        f"Missing dependencies: {', '.join(_missing)}\n"
+        f"Install with:  pip install -e \".[dev]\"\n"
+        f"  or:          pip install -r requirements-dev.txt"
+    )
 
 
 def _get_live_provider():

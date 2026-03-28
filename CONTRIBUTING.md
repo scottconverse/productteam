@@ -18,6 +18,18 @@ source .venv/bin/activate        # Linux/macOS
 pip install -e ".[dev]"
 ```
 
+### Auditors / zip reviewers
+
+If you're reviewing from a zip download (not a git clone), you can install
+dependencies without an editable install:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+This installs all runtime + test dependencies. The test suite will fail
+with a clear error message if any dependency is missing.
+
 ## Running Tests
 
 ```bash
