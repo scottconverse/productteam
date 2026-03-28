@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.11] - 2026-03-27
+
+### Fixed
+- Remove remaining phone/Slack/GitHub Issue claims from docs/index.html and cli.py
+- Forge step cards now describe actual behavior (CLI/dashboard submit, log monitoring)
+- CLI LAN output says "LAN access" instead of "From phone"
+
 ## [2.5.10] - 2026-03-27
 
 ### Fixed

@@ -849,7 +849,7 @@ def _forge_listen(with_dashboard: bool, *, lan: bool = False) -> None:
             except OSError:
                 local_ip = "your-machine-ip"
             console.print(f"[green]Dashboard:[/green] http://localhost:{port}")
-            console.print(f"[green]From phone:[/green] http://{local_ip}:{port}")
+            console.print(f"[green]LAN access:[/green] http://{local_ip}:{port}")
         else:
             console.print(f"[green]Dashboard:[/green] http://{host}:{port}")
 
