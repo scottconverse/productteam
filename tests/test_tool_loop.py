@@ -83,25 +83,31 @@ def test_validate_path_shared_prefix_sibling_rejected(tmp_path):
 
 
 def test_validate_path_symlink_escape_rejected(tmp_path):
-    """A symlink pointing outside the project must be rejected."""
-    import os
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    secret = outside / "secret.txt"
-    secret.write_text("secret")
+    """A path that resolves outside the project (e.g. via symlink) must be rejected.
+
+    Mocks Path.resolve() to simulate symlink behavior without requiring
+    OS symlink privileges (which need admin on Windows).
+    """
+    from unittest.mock import patch
 
     project = tmp_path / "project"
     project.mkdir()
+    outside_target = tmp_path / "outside" / "secret.txt"
 
-    # Create a symlink inside the project pointing outside
-    link = project / "escape_link"
-    try:
-        link.symlink_to(outside)
-    except OSError:
-        pytest.skip("OS does not support symlinks")
+    # Simulate: (project / "escape_link/secret.txt").resolve() -> outside_target
+    # This is exactly what happens when escape_link is a symlink to ../outside
+    original_resolve = Path.resolve
 
-    result = _validate_path("escape_link/secret.txt", project)
+    def fake_resolve(self, strict=False):
+        if "escape_link" in str(self):
+            return outside_target
+        return original_resolve(self, strict=strict)
+
+    with patch.object(Path, "resolve", fake_resolve):
+        result = _validate_path("escape_link/secret.txt", project)
+
     assert isinstance(result, str), "Symlink escape should be rejected"
+    assert "escapes" in result.lower()
 
 
 # ---------------------------------------------------------------------------
