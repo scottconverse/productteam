@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.5.8] - 2026-03-27
+
+### Security
+- Fix path sandbox: replace string-prefix check with Path.relative_to containment
+- Fix env leak: builder subprocesses now receive allowlisted env only (no API keys)
+- Dashboard requires token auth when bound to LAN (non-localhost)
+- Auto-installing project deps now opt-in via `auto_install_deps` config
+
+### Fixed
+- OpenAI provider: handle dict, malformed JSON, and missing tool arguments
+- Gemini provider: use tool_name (not tool_use_id) in function responses
+- Forge queue: atomic writes via temp-file + os.replace
+- Ollama provider: bump httpx timeout to 600s for large skill prompts
+
+### Changed
+- De-hype README, landing page, pyproject.toml to match actual capabilities
+- Document Forge as local batch runner (remote gates deferred to future release)
+- Document shell=True fallback honestly in code and README
+
 ## [2.5.7] - 2026-03-27
 
 ### Fixed
