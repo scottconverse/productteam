@@ -392,11 +392,11 @@ def _first_time_flow(prefs: dict, concept: str) -> Optional[dict]:
     console.print("  [bold]How would you like to run this?[/bold]\n")
     console.print(
         "    [bold cyan][A][/bold cyan] Local AI  "
-        "[dim]-- Free. Runs on your machine. Slower (~20-30 min).[/dim]"
+        "[dim]-- Free. Runs on your machine. ~20 min per step.[/dim]"
     )
     console.print(
         "    [bold cyan][B][/bold cyan] Cloud AI  "
-        "[dim]-- Fast (~1 min). Standard API costs (~$0.10-0.30/run).[/dim]"
+        "[dim]-- Deeper and faster. Incurs standard API access costs.[/dim]"
     )
     console.print()
 
@@ -514,15 +514,13 @@ def _init_and_run(target: Path, concept: str, config: dict) -> None:
     if provider_name == "ollama":
         mode_label = "local"
         cost_label = "Free"
-        time_label = "~20-45 min"
     else:
         mode_label = "cloud"
-        cost_label = "~$0.10-0.30"
-        time_label = "~1 min"
+        cost_label = "Standard API costs"
 
     console.print(
         f"\n  [bold]Starting pipeline[/bold] "
-        f"[dim]({mode_label}: {model}, est. {time_label}, {cost_label})[/dim]\n"
+        f"[dim]({mode_label}: {model}, {cost_label})[/dim]\n"
     )
 
     supervisor = Supervisor(

@@ -113,14 +113,14 @@ ProductTeam supports two AI paths. The interactive wizard (`productteam` with no
 
 | | Local AI (Ollama) | Cloud AI |
 |---|---|---|
-| **Cost** | Free | ~$0.10 - $0.30/run |
-| **Speed** | 20-45 min (typical project) | Under 1 minute |
+| **Cost** | Free | Standard API costs |
+| **Speed** | ~20 min/step | Faster with cloud models |
 | **Setup** | Install Ollama, pull a model | Set an API key |
 | **Recommended models** | gpt-oss:20b (primary), devstral:24b (backup) | Claude Haiku, GPT-4o-mini, Gemini Flash |
 | **Providers** | Ollama | Anthropic, OpenAI, Google Gemini |
 | **Internet required** | No | Yes |
 
-**Local models are free but slower.** A typical project takes 20-45 minutes on a 20B parameter model. Cloud APIs complete in under a minute.
+**Local models are free but slower.** Each pipeline step takes roughly 20 minutes on a 20B parameter model, so a full project takes hours. Cloud APIs are significantly faster.
 
 When using Ollama, ProductTeam auto-tunes for local execution: timeouts are increased, design review is skipped, and approval gates are set to auto-approve.
 
@@ -219,15 +219,15 @@ ProductTeam runs LLM-generated shell commands on your machine. That's inherently
 
 ## Cost
 
-**ProductTeam can run entirely free using Ollama.** No API key, no cloud account, no bill. Local models take longer (20-45 minutes vs. under a minute) but cost nothing.
+**ProductTeam can run entirely free using Ollama.** No API key, no cloud account, no bill. Local models are slower (~20 min per pipeline step, so a full project takes hours) but cost nothing.
 
-For cloud APIs, ProductTeam makes LLM calls at every pipeline stage. Estimated costs for a typical small project (2-3 sprints, `quality = "standard"`):
+For cloud APIs, ProductTeam makes LLM calls at every pipeline stage. Cloud runs are deeper and faster but incur standard API access costs. Actual cost depends on concept complexity, quality level, and model choice.
 
-| Path | Model | Est. Cost | Speed |
-|------|-------|-----------|-------|
-| Local AI | Ollama (gpt-oss:20b) | Free | 20-45 min |
-| Cloud AI | Claude Haiku | $0.10 - $0.40 | ~1 min |
-| Cloud AI | Claude Sonnet | $0.50 - $2.00 | ~1 min |
+| Path | Model | Est. Cost |
+|------|-------|-----------|
+| Local AI | Ollama (gpt-oss:20b) | Free |
+| Cloud AI | Claude Haiku | Standard API costs |
+| Cloud AI | Claude Sonnet | Standard API costs |
 
 Costs scale with:
 - **Concept complexity** — more features = more sprints = more tokens

@@ -330,7 +330,7 @@
         <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:12px;">Free. Runs on your machine.</div>
         <div style="font-size:14px;color:var(--text-muted);line-height:1.7;">
           Powered by <a href="https://ollama.com">Ollama</a>. No API key needed. Recommended model: <code>gpt-oss:20b</code>.<br>
-          ~20-45 minutes per project on consumer hardware.<br>
+          ~20 min per pipeline step on consumer hardware. A full project takes hours.<br>
           Just install Ollama and go.
         </div>
         <div class="install-block" style="margin-top:16px;margin-bottom:0;padding:14px 18px;">
@@ -343,7 +343,7 @@
         <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:12px;">Fast. Bring your API key.</div>
         <div style="font-size:14px;color:var(--text-muted);line-height:1.7;">
           Anthropic Claude, OpenAI, or Google Gemini.<br>
-          ~$0.10-0.30 per run. Completes in under a minute.<br>
+          Use your API key for deeper and faster work. Incurs standard API access costs.<br>
           Paste your API key when prompted.
         </div>
         <div class="install-block" style="margin-top:16px;margin-bottom:0;padding:14px 18px;">
@@ -352,7 +352,7 @@
         </div>
       </div>
     </div>
-    <p style="color:var(--text-muted);font-size:14px;margin-top:20px;text-align:center;max-width:720px;margin-left:auto;margin-right:auto;">Local models are free but slower. A typical project takes 20-45 minutes on a 20B parameter model running on consumer hardware. Cloud APIs complete the same project in under a minute.</p>
+    <p style="color:var(--text-muted);font-size:14px;margin-top:20px;text-align:center;max-width:720px;margin-left:auto;margin-right:auto;">Local models are free but slower. Each pipeline step takes ~20 minutes on a 20B parameter model running on consumer hardware, so a full project takes hours. Cloud APIs are significantly faster.</p>
   </div>
 </section>
 
@@ -601,8 +601,8 @@
       <span class="comment"># The wizard asks:</span><br>
       <span class="muted">What are we building?</span> <span class="cmd">a CLI tool that estimates LLM API costs</span><br><br>
       <span class="muted">How do you want to run?</span><br>
-      <span class="cmd">&nbsp; [A] Local AI (Ollama) — free, ~20-45 min</span><br>
-      <span class="cmd">&nbsp; [B] Cloud AI — fast (~1 min), requires API key</span>
+      <span class="cmd">&nbsp; [A] Local AI (Ollama) — free, ~20 min/step</span><br>
+      <span class="cmd">&nbsp; [B] Cloud AI — deeper and faster, requires API key</span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:16px;">
       <div class="install-block" style="margin:0;">

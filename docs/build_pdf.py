@@ -119,12 +119,12 @@ def build_dual_path_diagram():
 
     # Path A: Local AI (left)
     _arrow(d, 190, 132, 110, 95, GREEN)
-    _box(d, 20, 60, 180, 34, "A  Local AI (Ollama)", "Free  |  ~20-45 min  |  No API key",
+    _box(d, 20, 60, 180, 34, "A  Local AI (Ollama)", "Free  |  ~20 min/step  |  No API key",
          fill=HexColor("#e8f5e9"), border=GREEN, text_color=HexColor("#1b5e20"), font_size=9)
 
     # Path B: Cloud AI (right)
     _arrow(d, 310, 132, 390, 95, ACCENT)
-    _box(d, 300, 60, 180, 34, "B  Cloud AI", "Fast ~1 min  |  $0.10-0.30  |  API key",
+    _box(d, 300, 60, 180, 34, "B  Cloud AI", "Deeper & faster  |  API key required",
          fill=HexColor("#e3f2fd"), border=ACCENT, text_color=HexColor("#0d47a1"), font_size=9)
 
     # Both converge to setup
@@ -275,7 +275,7 @@ class CoverPage(Flowable):
         c.drawCentredString(w/2 - 90, h - 370, "A  LOCAL AI")
         c.setFillColor(TEXT_MUTED)
         c.setFont(FONT, 9)
-        c.drawCentredString(w/2 - 90, h - 385, "Free  |  Ollama  |  ~20-45 min")
+        c.drawCentredString(w/2 - 90, h - 385, "Free  |  Ollama  |  ~20 min/step")
 
         # Blue pill - cloud
         c.setFillColor(ACCENT)
@@ -283,7 +283,7 @@ class CoverPage(Flowable):
         c.drawCentredString(w/2 + 90, h - 370, "B  CLOUD AI")
         c.setFillColor(TEXT_MUTED)
         c.setFont(FONT, 9)
-        c.drawCentredString(w/2 + 90, h - 385, "Fast  |  API Key  |  ~1 min")
+        c.drawCentredString(w/2 + 90, h - 385, "Deeper & faster  |  API Key")
 
         # Author
         c.setFillColor(TEXT_MUTED)
@@ -368,8 +368,8 @@ def build_pdf(output_path: str):
     story.append(make_table(
         ["", "Local AI (Ollama)", "Cloud AI"],
         [
-            ["Cost", "Free", "$0.10 - $2.00 per run"],
-            ["Speed", "~20-45 minutes", "~1 minute"],
+            ["Cost", "Free", "Standard API costs"],
+            ["Speed", "~20 min/step", "Faster with cloud models"],
             ["Setup", "Install Ollama + pull model", "Paste API key"],
             ["Recommended model", "gpt-oss:20b (13 GB)", "Claude Sonnet / GPT-4o"],
             ["Internet required", "No (after model download)", "Yes"],
@@ -379,10 +379,9 @@ def build_pdf(output_path: str):
     ))
     story.append(Spacer(1, 12))
     story.append(Paragraph(
-        "<b>Note:</b> Local models are free but slower. A typical small project "
-        "(2-3 sprints, CLI tool complexity) takes 20-45 minutes on a 20B parameter model "
-        "running on consumer hardware with 32K context. Cloud APIs complete the same "
-        "project in under a minute.",
+        "<b>Note:</b> Local models are free but slower. Each pipeline step takes ~20 minutes "
+        "on a 20B parameter model running on consumer hardware with 32K context, so a full "
+        "project takes hours. Cloud APIs are significantly faster.",
         style_warning))
     story.append(PageBreak())
 
@@ -477,7 +476,7 @@ def build_pdf(output_path: str):
 
     story.append(Paragraph("Preflight Check", style_h2))
     story.append(Paragraph(
-        "Before committing to a 20-45 minute pipeline run, verify your model works:",
+        "Before committing to a long pipeline run, verify your model works:",
         style_body))
     story.append(Paragraph("<font face='Courier' size='9'>productteam preflight</font>", style_code))
     story.append(Paragraph(
@@ -498,17 +497,17 @@ def build_pdf(output_path: str):
     # ── 5. Cloud AI Setup ──
     story.append(Paragraph("5. Cloud AI Setup", style_h1))
     story.append(Paragraph(
-        "For fast pipeline runs (~1 minute), use a cloud API provider.",
+        "For deeper and faster pipeline runs, use a cloud API provider.",
         style_body))
     story.append(Spacer(1, 8))
 
     story.append(Paragraph("Supported Providers", style_h2))
     story.append(make_table(
-        ["Provider", "Default Model", "Est. Cost/Run", "Context Window"],
+        ["Provider", "Default Model", "Cost", "Context Window"],
         [
-            ["Anthropic", "Claude Sonnet 4", "$0.50 - $2.00", "200K tokens"],
-            ["OpenAI", "GPT-4o", "$0.25 - $1.50", "128K tokens"],
-            ["Google", "Gemini 2.0 Flash", "$0.05 - $0.30", "1M tokens"],
+            ["Anthropic", "Claude Sonnet 4", "Standard API costs", "200K tokens"],
+            ["OpenAI", "GPT-4o", "Standard API costs", "128K tokens"],
+            ["Google", "Gemini 2.0 Flash", "Standard API costs", "1M tokens"],
         ],
         col_widths=[usable_w*0.2, usable_w*0.25, usable_w*0.25, usable_w*0.3],
     ))
@@ -535,14 +534,14 @@ def build_pdf(output_path: str):
         style_body))
     story.append(Spacer(1, 8))
     story.append(make_table(
-        ["Path", "Model", "Est. Cost", "Est. Time", "Notes"],
+        ["Path", "Model", "Cost", "Notes"],
         [
-            ["Local AI", "gpt-oss:20b (Ollama)", "$0.00", "20-45 min", "Free forever. Runs on your hardware."],
-            ["Cloud (cheap)", "Claude Haiku", "$0.10 - $0.40", "~1 min", "Best value for simple projects."],
-            ["Cloud (balanced)", "GPT-4o", "$0.25 - $1.50", "~1 min", "Good balance of cost and quality."],
-            ["Cloud (powerful)", "Claude Sonnet", "$0.50 - $2.00", "~1 min", "Best output quality."],
+            ["Local AI", "gpt-oss:20b (Ollama)", "Free", "Runs on your hardware. ~20 min/step."],
+            ["Cloud (cheap)", "Claude Haiku", "Standard API costs", "Best value for simple projects."],
+            ["Cloud (balanced)", "GPT-4o", "Standard API costs", "Good balance of cost and quality."],
+            ["Cloud (powerful)", "Claude Sonnet", "Standard API costs", "Best output quality."],
         ],
-        col_widths=[usable_w*0.14, usable_w*0.23, usable_w*0.14, usable_w*0.14, usable_w*0.35],
+        col_widths=[usable_w*0.14, usable_w*0.23, usable_w*0.22, usable_w*0.41],
     ))
     story.append(Spacer(1, 12))
     story.append(Paragraph(
