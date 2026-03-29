@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from productteam.errors import ProductTeamConfigError
@@ -633,6 +634,45 @@ def test_openai_model_id(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     p = get_provider(provider="openai", model="gpt-4-turbo")
     assert p.model_id() == "gpt-4-turbo"
+
+
+# ---------------------------------------------------------------------------
+# Ollama retry on transient errors
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_ollama_retries_on_500():
+    """OllamaProvider retries on 500 errors and succeeds on later attempt."""
+    from productteam.providers.ollama import OllamaProvider
+
+    ok_resp = MagicMock()
+    ok_resp.status_code = 200
+    ok_resp.raise_for_status = MagicMock()
+    ok_resp.json.return_value = {
+        "message": {"role": "assistant", "content": "recovered"}
+    }
+
+    err_resp = MagicMock()
+    err_resp.status_code = 500
+    err_resp.raise_for_status = MagicMock(
+        side_effect=httpx.HTTPStatusError(
+            "500 Server Error", request=MagicMock(), response=err_resp,
+        )
+    )
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(side_effect=[err_resp, ok_resp])
+
+    provider = OllamaProvider(model="test-model")
+
+    with patch("productteam.providers.ollama.asyncio.sleep", new_callable=AsyncMock):
+        data = await provider._post_with_retry(
+            mock_client,
+            {"model": "test", "messages": [], "stream": False},
+        )
+    assert data["message"]["content"] == "recovered"
+    assert mock_client.post.call_count == 2
 
 
 # ---------------------------------------------------------------------------

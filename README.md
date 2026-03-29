@@ -1,8 +1,8 @@
 # ProductTeam
 
-**A structured AI software delivery pipeline for small projects.**
+**A structured AI software delivery pipeline for small projects. Run free with local models or fast with cloud APIs.**
 
-ProductTeam turns a product concept into a PRD, sprint plan, implementation passes, evaluation passes, and documentation. It is designed for supervised use, with state persistence, recovery tools, and optional approval gates. You describe a concept in plain English. Seven AI agents handle the stages — with three human approval gates where you confirm intent, scope, and readiness.
+ProductTeam turns a product concept into a PRD, sprint plan, implementation passes, evaluation passes, and documentation. It is designed for supervised use, with state persistence, recovery tools, and optional approval gates. You describe a concept in plain English. Seven AI agents handle the stages — with three human approval gates where you confirm intent, scope, and readiness. Choose between free local AI (Ollama) or fast cloud APIs (Anthropic, OpenAI, Google Gemini) -- an interactive wizard helps you pick.
 
 The builder never grades its own work. A separate, skeptical evaluator reads the code, runs the tests, and tries to break things. Code ships only when the evaluator says PASS — not when the builder says "done."
 
@@ -107,12 +107,42 @@ Want just the Evaluator as a QA agent against your existing codebase? Use just t
 
 ---
 
+## Two Ways to Run
+
+ProductTeam supports two AI paths. The interactive wizard (`productteam` with no arguments) walks you through selecting one.
+
+| | Local AI (Ollama) | Cloud AI |
+|---|---|---|
+| **Cost** | Free | ~$0.10 - $0.30/run |
+| **Speed** | 20-45 min (typical project) | Under 1 minute |
+| **Setup** | Install Ollama, pull a model | Set an API key |
+| **Recommended models** | gpt-oss:20b (primary), devstral:24b (backup) | Claude Haiku, GPT-4o-mini, Gemini Flash |
+| **Providers** | Ollama | Anthropic, OpenAI, Google Gemini |
+| **Internet required** | No | Yes |
+
+**Local models are free but slower.** A typical project takes 20-45 minutes on a 20B parameter model. Cloud APIs complete in under a minute.
+
+When using Ollama, ProductTeam auto-tunes for local execution: timeouts are increased, design review is skipped, and approval gates are set to auto-approve.
+
+---
+
 ## Quick Start
 
 ```bash
 # Install
 pip install productteam
 
+# Launch the interactive wizard (recommended)
+productteam
+```
+
+The wizard walks you through everything: describe your concept, choose Local AI or Cloud AI, and go. It remembers your last choice -- one keystroke to reuse it next time.
+
+Cloud API keys are stored locally in `~/.productteam/prefs.json` and never sent anywhere except to the provider you chose.
+
+**Power-user alternative** -- skip the wizard and run directly:
+
+```bash
 # Set up your provider (pick one)
 export ANTHROPIC_API_KEY=sk-ant-...     # Anthropic
 export OPENAI_API_KEY=sk-...            # OpenAI
@@ -136,6 +166,9 @@ productteam recover
 
 # Check your environment
 productteam doctor
+
+# Test if an Ollama model can run the pipeline
+productteam preflight
 ```
 
 ---
@@ -164,6 +197,8 @@ ProductTeam runs LLM-generated shell commands on your machine. That's inherently
 
 | Command | What It Does |
 |---------|-------------|
+| `productteam` | Launch the interactive wizard |
+| `productteam preflight` | Test whether an Ollama model can run the pipeline |
 | `productteam init` | Initialize a project directory |
 | `productteam run "concept"` | Run the full pipeline |
 | `productteam run` | Resume from current state |
@@ -184,14 +219,15 @@ ProductTeam runs LLM-generated shell commands on your machine. That's inherently
 
 ## Cost
 
-ProductTeam makes LLM API calls at every pipeline stage. Estimated costs
-for a typical small project (2-3 sprints, `quality = "standard"`):
+**ProductTeam can run entirely free using Ollama.** No API key, no cloud account, no bill. Local models take longer (20-45 minutes vs. under a minute) but cost nothing.
 
-| Model | Est. Cost |
-|-------|-----------|
-| Claude Haiku | $0.10 – $0.40 |
-| Claude Sonnet | $0.50 – $2.00 |
-| Ollama (local) | Free |
+For cloud APIs, ProductTeam makes LLM calls at every pipeline stage. Estimated costs for a typical small project (2-3 sprints, `quality = "standard"`):
+
+| Path | Model | Est. Cost | Speed |
+|------|-------|-----------|-------|
+| Local AI | Ollama (gpt-oss:20b) | Free | 20-45 min |
+| Cloud AI | Claude Haiku | $0.10 - $0.40 | ~1 min |
+| Cloud AI | Claude Sonnet | $0.50 - $2.00 | ~1 min |
 
 Costs scale with:
 - **Concept complexity** — more features = more sprints = more tokens

@@ -17,7 +17,8 @@ app = typer.Typer(
     name="productteam",
     help="AI-powered product development pipeline using Claude skills.",
     add_completion=False,
-    no_args_is_help=True,
+    no_args_is_help=False,
+    invoke_without_command=True,
 )
 
 test_app = typer.Typer(help="Run ProductTeam test suite.")
@@ -31,6 +32,15 @@ app.add_typer(forge_app, name="forge")
 
 console = Console()
 error_console = Console(stderr=True)
+
+
+@app.callback(invoke_without_command=True)
+def main_callback(ctx: typer.Context) -> None:
+    """Launch interactive wizard when no subcommand is given."""
+    if ctx.invoked_subcommand is not None:
+        return
+    from productteam.onboard import run_wizard
+    run_wizard()
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +412,85 @@ def run_cmd(
     elif result.status == "failed":
         console.print("\n[red]Pipeline failed.[/red]")
         raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# productteam preflight
+# ---------------------------------------------------------------------------
+
+
+@app.command("preflight")
+def preflight_cmd(
+    model: Optional[str] = typer.Argument(
+        None, help="Model to test. If omitted, tests all installed Ollama models."
+    ),
+    timeout: float = typer.Option(180.0, "--timeout", "-t", help="Timeout per test in seconds"),
+) -> None:
+    """Test whether an Ollama model can run the ProductTeam pipeline.
+
+    Checks basic response, tool calling, and multi-turn tool use.
+    """
+    import asyncio
+
+    from productteam.preflight import check_model, format_result
+
+    if model:
+        models = [model]
+    else:
+        # Discover installed models
+        try:
+            import subprocess as sp
+            r = sp.run(["ollama", "list"], capture_output=True, text=True, timeout=10)
+            if r.returncode != 0:
+                error_console.print("[red]Error:[/red] Could not list Ollama models. Is Ollama running?")
+                raise typer.Exit(code=1)
+            models = []
+            for line in r.stdout.strip().splitlines()[1:]:
+                parts = line.split()
+                if parts:
+                    models.append(parts[0])
+            if not models:
+                error_console.print("[yellow]No Ollama models installed.[/yellow]")
+                raise typer.Exit(code=1)
+        except FileNotFoundError:
+            error_console.print("[red]Error:[/red] Ollama not found. Install from https://ollama.com/download")
+            raise typer.Exit(code=1)
+
+    console.print(f"\n[bold]Preflight Check[/bold] -- {len(models)} model(s), {timeout:.0f}s timeout\n")
+
+    import time
+
+    results = []
+    for i, m in enumerate(models, 1):
+        console.print(f"  [{i}/{len(models)}] Testing [bold]{m}[/bold] ...")
+        t0 = time.monotonic()
+        r = asyncio.run(check_model(m, timeout=timeout))
+        elapsed = time.monotonic() - t0
+        console.print(format_result(r))
+        console.print(f"    Total time:      {elapsed:.1f}s")
+        results.append(r)
+
+    # Summary table
+    console.print(f"\n{'=' * 60}")
+    console.print(f"  {'Model':<28} {'Basic':>6} {'Tools':>6} {'Multi':>6} {'Ready':>7}")
+    console.print(f"  {'-' * 28} {'-' * 6} {'-' * 6} {'-' * 6} {'-' * 7}")
+    for r in results:
+        console.print(
+            f"  {r.model:<28} "
+            f"{'PASS' if r.basic_response else 'FAIL':>6} "
+            f"{'PASS' if r.tool_calling else 'FAIL':>6} "
+            f"{'PASS' if r.multi_turn else 'FAIL':>6} "
+            f"{'YES' if r.pipeline_ready else 'NO':>7}"
+        )
+    console.print()
+
+    ready_count = sum(1 for r in results if r.pipeline_ready)
+    if ready_count == 0:
+        console.print("[yellow]No models passed all checks.[/yellow]")
+        console.print(f"[dim]Recommended: ollama pull gpt-oss:20b[/dim]\n")
+        raise typer.Exit(code=1)
+    else:
+        console.print(f"[green]{ready_count} model(s) ready for pipeline.[/green]\n")
 
 
 # ---------------------------------------------------------------------------

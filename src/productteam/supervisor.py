@@ -23,6 +23,7 @@ from rich.prompt import Prompt
 from productteam.errors import BudgetExceededError
 from productteam.models import ProductTeamConfig
 from productteam.providers.base import LLMProvider
+from productteam.text_builder import extract_files, write_extracted_files
 from productteam.tool_loop import ToolLoopResult, run_tool_loop
 
 console = Console()
@@ -293,6 +294,9 @@ class Supervisor:
         self.provider = provider
         self.auto_approve = auto_approve
         self.state = _load_state(project_dir)
+        # None = not yet probed; True = model supports tools; False = text-only
+        self._tool_mode: bool | None = None
+        self._stage_callback: Callable | None = None
 
         # Budget: CLI flag overrides config, config default is 2.0
         effective_budget = budget_usd if budget_usd is not None else config.pipeline.budget_usd
@@ -509,6 +513,10 @@ class Supervisor:
 
         # 2. Plan (doer — writes sprint YAML files to .productteam/sprints/)
         if not _is_stage_complete(self.state, "plan") or rebuild:
+            # Probe tool support now so plan stage uses the right path
+            if self._tool_mode is None:
+                await self._probe_tool_support()
+
             prd_content = self._read_artifact("prd")
             max_sprints = self.config.pipeline.max_sprints
             plan_context = (
@@ -518,10 +526,15 @@ class Supervisor:
                 f"If the PRD describes more work than fits in {max_sprints} sprints, "
                 f"prioritize the most critical features and note what was deferred."
             )
-            result = await self._run_tool_loop_stage(
-                PipelineStage.PLAN, "planner", plan_context,
-                timeout_seconds=self.config.pipeline.planner_timeout_seconds,
-            )
+            if self._tool_mode:
+                result = await self._run_tool_loop_stage(
+                    PipelineStage.PLAN, "planner", plan_context,
+                    timeout_seconds=self.config.pipeline.planner_timeout_seconds,
+                )
+            else:
+                result = await self._run_text_thinker_stage(
+                    PipelineStage.PLAN, "planner", plan_context,
+                )
             stages.append(result)
             if result.status != "complete":
                 return SupervisorResult(concept=concept, stages=stages, status="stuck")
@@ -533,6 +546,18 @@ class Supervisor:
 
         # 3. Build + Evaluate loop
         sprints = self._find_sprints()
+        if not sprints and _is_stage_complete(self.state, "plan"):
+            # Fallback: some models (especially smaller Ollama models) output
+            # the sprint plan as text instead of using write_file to create
+            # YAML files.  Try to synthesize a minimal sprint YAML from the
+            # plan text so the pipeline can continue.
+            synthesized = self._synthesize_sprint_from_plan()
+            if synthesized:
+                console.print(
+                    "[yellow]Planner did not write sprint YAML files — "
+                    "synthesized from plan text.[/yellow]"
+                )
+                sprints = self._find_sprints()
         if not sprints:
             if _is_stage_complete(self.state, "plan"):
                 console.print(
@@ -549,7 +574,14 @@ class Supervisor:
                 console.print(f"[dim]{sprint_name}: already passed, skipping[/dim]")
                 continue
 
-            result = await self._build_evaluate_loop(sprint_name)
+            # Auto-detect tool support before first build
+            if self._tool_mode is None:
+                await self._probe_tool_support()
+
+            if self._tool_mode:
+                result = await self._build_evaluate_loop(sprint_name)
+            else:
+                result = await self._build_evaluate_loop_text(sprint_name)
             stages.append(result)
             if result.status not in ("complete", "skipped"):
                 return SupervisorResult(concept=concept, stages=stages, status="stuck")
@@ -573,23 +605,37 @@ class Supervisor:
                 f"Start by reading existing source files listed below.\n\n"
                 f"Project files:\n{file_listing}"
             )
-            result = await self._run_tool_loop_stage(
-                PipelineStage.DOCUMENT, "doc-writer",
-                doc_context,
-                max_tool_calls=self.config.pipeline.doc_writer_max_tool_calls,
-            )
+            if self._tool_mode:
+                result = await self._run_tool_loop_stage(
+                    PipelineStage.DOCUMENT, "doc-writer",
+                    doc_context,
+                    max_tool_calls=self.config.pipeline.doc_writer_max_tool_calls,
+                )
+            else:
+                result = await self._run_text_thinker_stage(
+                    PipelineStage.DOCUMENT, "doc-writer", doc_context,
+                )
             stages.append(result)
 
         # 4b. Design Evaluation (single pass — no retry loop because there is
         # no mechanism to route back to Doc Writer/UI Builder to fix issues)
         if self.config.pipeline.require_design_review:
             if not _is_stage_complete(self.state, "evaluate-design") or rebuild:
-                result = await self._run_tool_loop_stage(
-                    PipelineStage.EVALUATE_DESIGN, "evaluator-design",
+                design_context = (
                     f"Quality level: {self.config.pipeline.quality}\n\n"
                     f"Evaluate design quality. Read docs/index.html, docs/terms.html, "
-                    f"and README.md. Concept: {concept}",
+                    f"and README.md. Concept: {concept}"
                 )
+                if self._tool_mode:
+                    result = await self._run_tool_loop_stage(
+                        PipelineStage.EVALUATE_DESIGN, "evaluator-design",
+                        design_context,
+                    )
+                else:
+                    result = await self._run_text_thinker_stage(
+                        PipelineStage.EVALUATE_DESIGN, "evaluator-design",
+                        design_context,
+                    )
                 stages.append(result)
 
                 verdict = self._parse_verdict(result.raw_response or "")
@@ -644,7 +690,11 @@ class Supervisor:
         elif stage == PipelineStage.BUILD:
             sprints = self._find_sprints()
             sprint_name = sprint or (sprints[0] if sprints else "sprint-001")
-            return await self._build_evaluate_loop(sprint_name)
+            if self._tool_mode is None:
+                await self._probe_tool_support()
+            if self._tool_mode:
+                return await self._build_evaluate_loop(sprint_name)
+            return await self._build_evaluate_loop_text(sprint_name)
         elif stage == PipelineStage.EVALUATE:
             sprints = self._find_sprints()
             sprint_name = sprint or (sprints[-1] if sprints else "sprint-001")
@@ -1087,6 +1137,391 @@ class Supervisor:
             cache_read_input_tokens=total_cache_read,
         )
 
+    async def _run_text_thinker_stage(
+        self,
+        stage: PipelineStage,
+        skill_name: str,
+        context: str,
+    ) -> StageResult:
+        """Text-only thinker stage using complete() instead of tool loop.
+
+        For stages that primarily produce text output (doc-writer, design-eval).
+        Any code fences in the output are extracted and written to disk.
+        """
+        self._notify_stage(stage.value)
+        console.print(f"\n[bold cyan]Running: {stage.value} (text mode)[/bold cyan]")
+
+        try:
+            system_prompt = _load_skill(
+                self.project_dir, skill_name, self.config.pipeline.skills_dir
+            )
+        except FileNotFoundError as e:
+            return StageResult(stage=stage, status="failed", error=str(e))
+
+        self.state["pipeline_phase"] = stage.value
+        self.state.setdefault("stages", {})[stage.value] = {"status": "running"}
+        _save_state(self.project_dir, self.state)
+
+        # Add file listing context and text-only instructions
+        file_listing = self._project_file_listing()
+        full_context = context
+        if file_listing:
+            full_context += f"\n\n--- PROJECT FILES ---\n{file_listing}"
+
+        # Read source files so the model has full context
+        file_contents = []
+        for f in sorted(self.project_dir.rglob("*")):
+            if f.is_dir():
+                continue
+            rel = str(f.relative_to(self.project_dir))
+            if any(skip in rel for skip in [
+                ".venv", "__pycache__", ".productteam", "node_modules",
+                ".git", ".pytest_cache",
+            ]):
+                continue
+            if rel == "productteam.toml":
+                continue
+            if f.suffix in (".py", ".md", ".html", ".css", ".json", ".toml", ".txt"):
+                try:
+                    content = f.read_text(encoding="utf-8")
+                    if len(content) < 5000:  # Skip huge files
+                        file_contents.append(f"**{rel}**\n```\n{content}\n```")
+                except Exception:
+                    continue
+
+        if file_contents:
+            full_context += "\n\n--- FILE CONTENTS ---\n\n" + "\n\n".join(file_contents)
+
+        system_prompt += (
+            "\n\n--- TEXT-ONLY MODE ---\n"
+            "You do NOT have access to tools. If you need to create files, "
+            "output them as markdown fenced code blocks with the file path "
+            "in bold above each block, like **README.md**."
+        )
+
+        try:
+            text, _usage = await self.provider.complete(
+                system=system_prompt,
+                messages=[{"role": "user", "content": full_context}],
+                max_tokens=8192,
+            )
+        except Exception as e:
+            return StageResult(stage=stage, status="failed", error=str(e))
+
+        # Extract and write any files from the response
+        extracted = extract_files(text)
+        if extracted:
+            written = write_extracted_files(extracted, self.project_dir)
+            if written:
+                console.print(f"  [green]Wrote: {', '.join(written)}[/green]")
+
+        # Write artifact
+        artifact_path = self._write_artifact(stage, text)
+
+        self.state["stages"][stage.value] = {
+            "status": "complete",
+            "artifact": artifact_path,
+        }
+        _save_state(self.project_dir, self.state)
+
+        console.print(f"[green]Stage {stage.value} complete[/green]")
+        return StageResult(
+            stage=stage,
+            status="complete",
+            artifact_path=artifact_path,
+            raw_response=text,
+        )
+
+    async def _probe_tool_support(self) -> bool:
+        """Quick probe: can the configured model make tool calls?
+
+        Sends a tiny prompt with one tool and checks if the response
+        contains a tool_use block.  Caches the result in self._tool_mode.
+        Only probes for Ollama provider — all cloud APIs support tools.
+        """
+        if self._tool_mode is not None:
+            return self._tool_mode
+
+        # Cloud providers always support tools — skip the probe
+        from productteam.providers.ollama import OllamaProvider
+        if not isinstance(self.provider, OllamaProvider):
+            self._tool_mode = True
+            return True
+
+        probe_tool = {
+            "name": "write_file",
+            "description": "Write content to a file.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["path", "content"],
+            },
+        }
+        try:
+            resp = await asyncio.wait_for(
+                self.provider.complete_with_tools(
+                    system="You MUST use the write_file tool. Do not respond with text.",
+                    messages=[{
+                        "role": "user",
+                        "content": "Create a file called test.txt containing 'hello'",
+                    }],
+                    tools=[probe_tool],
+                    max_tokens=256,
+                ),
+                timeout=120.0,
+            )
+            tool_uses = [
+                b for b in resp.get("content", [])
+                if b.get("type") == "tool_use"
+            ]
+            self._tool_mode = len(tool_uses) > 0
+        except Exception:
+            self._tool_mode = False
+
+        mode_label = "tool-calling" if self._tool_mode else "text-only"
+        console.print(f"[dim]Model mode: {mode_label}[/dim]")
+        return self._tool_mode
+
+    async def _run_text_build(
+        self,
+        sprint_contract: str,
+        loop_num: int,
+        max_loops: int,
+        last_eval_feedback: str,
+    ) -> tuple[str, list[str]]:
+        """Text-only builder: single LLM call, extract code from fences.
+
+        Returns (raw_response_text, list_of_written_file_paths).
+        """
+        try:
+            system_prompt = _load_skill(
+                self.project_dir, "builder", self.config.pipeline.skills_dir
+            )
+        except FileNotFoundError:
+            system_prompt = "You are a software engineer. Write clean, working code."
+
+        # Modify system prompt for text-only mode
+        system_prompt += (
+            "\n\n--- TEXT-ONLY MODE ---\n"
+            "You do NOT have access to tools. Instead, output ALL code files "
+            "as markdown fenced code blocks. Before each code block, write "
+            "the file path in bold like **src/models.py** on its own line.\n\n"
+            "Example format:\n"
+            "**src/models.py**\n"
+            "```python\n"
+            "class Bookmark:\n"
+            "    pass\n"
+            "```\n\n"
+            "Write EVERY file needed. Do not skip files or say 'similar to above'."
+        )
+
+        build_prompt = (
+            f"Implement the following sprint contract. "
+            f"Output every file as a fenced code block with the path in bold above it.\n\n"
+            f"{sprint_contract}\n\n"
+            f"This is loop {loop_num} of {max_loops}."
+        )
+        if last_eval_feedback:
+            build_prompt += (
+                f"\n\n--- EVALUATOR FEEDBACK FROM PREVIOUS LOOP ---\n"
+                f"Fix these issues:\n\n{last_eval_feedback}"
+            )
+
+        # Provide existing file listing so builder knows what's already there
+        file_listing = self._project_file_listing()
+        if file_listing:
+            build_prompt += f"\n\n--- EXISTING PROJECT FILES ---\n{file_listing}"
+
+        text, _usage = await self.provider.complete(
+            system=system_prompt,
+            messages=[{"role": "user", "content": build_prompt}],
+            max_tokens=8192,
+        )
+
+        # Extract and write files
+        extracted = extract_files(text)
+        written = write_extracted_files(extracted, self.project_dir)
+
+        if written:
+            console.print(f"    [green]Wrote {len(written)} files: {', '.join(written)}[/green]")
+        else:
+            console.print(f"    [yellow]No files extracted from response[/yellow]")
+
+        return text, written
+
+    async def _run_text_evaluate(
+        self,
+        sprint_contract: str,
+        sprint_name: str,
+        loop_num: int,
+        max_loops: int,
+    ) -> str:
+        """Text-only evaluator: reads files from disk, sends to model.
+
+        Returns the evaluator's text response.
+        """
+        try:
+            eval_system = _load_skill(
+                self.project_dir, "evaluator", self.config.pipeline.skills_dir
+            )
+        except FileNotFoundError:
+            eval_system = "You are a code evaluator. Check acceptance criteria."
+
+        # Read all project source files and include them in the prompt
+        file_contents = []
+        src_files = list(self.project_dir.rglob("*.py"))
+        src_files += list(self.project_dir.rglob("*.json"))
+        src_files += list(self.project_dir.rglob("*.toml"))
+        for f in sorted(src_files):
+            # Skip venv, __pycache__, .productteam internals
+            rel = str(f.relative_to(self.project_dir))
+            if any(skip in rel for skip in [".venv", "__pycache__", ".productteam", "node_modules"]):
+                continue
+            if rel == "productteam.toml":
+                continue
+            try:
+                content = f.read_text(encoding="utf-8")
+                file_contents.append(f"**{rel}**\n```\n{content}\n```")
+            except Exception:
+                continue
+
+        eval_system += (
+            "\n\n--- TEXT-ONLY MODE ---\n"
+            "You do NOT have tools. The project files are provided below. "
+            "Check each acceptance criterion against the code provided. "
+            "End your response with a clear verdict line:\n"
+            "VERDICT: PASS  — if all acceptance criteria are met\n"
+            "VERDICT: NEEDS_WORK  — if issues need fixing\n"
+            "VERDICT: FAIL  — if fundamentally broken"
+        )
+
+        eval_prompt = (
+            f"Quality level: {self.config.pipeline.quality}\n\n"
+            f"Evaluate sprint {sprint_name} (loop {loop_num}/{max_loops}).\n\n"
+            f"Sprint contract:\n{sprint_contract}\n\n"
+            f"--- PROJECT FILES ---\n\n"
+            + "\n\n".join(file_contents)
+        )
+
+        text, _usage = await self.provider.complete(
+            system=eval_system,
+            messages=[{"role": "user", "content": eval_prompt}],
+            max_tokens=4096,
+        )
+        return text
+
+    async def _build_evaluate_loop_text(self, sprint_name: str) -> StageResult:
+        """Text-only build-evaluate loop for models without tool support."""
+        max_loops = self.config.pipeline.max_loops
+        console.print(f"\n[bold yellow]Build-Evaluate (text mode): {sprint_name}[/bold yellow]")
+
+        self._setup_project_env()
+
+        # Load sprint contract
+        sprint_path = self.project_dir / ".productteam" / "sprints" / f"{sprint_name}.yaml"
+        if not sprint_path.exists():
+            sprint_path = self.project_dir / ".productteam" / "sprints" / sprint_name / "sprint-contract.yaml"
+        if not sprint_path.exists():
+            return StageResult(
+                stage=PipelineStage.BUILD,
+                status="failed",
+                error=f"Sprint contract not found: {sprint_name}",
+            )
+
+        sprint_contract = sprint_path.read_text(encoding="utf-8")
+        last_eval_feedback: str = ""
+
+        for loop_num in range(1, max_loops + 1):
+            console.print(f"  [dim]Loop {loop_num}/{max_loops} (text-only)[/dim]")
+
+            # Build
+            self.state.setdefault("stages", {})["build"] = {
+                "status": "running", "sprint": sprint_name, "loop": loop_num,
+            }
+            _save_state(self.project_dir, self.state)
+
+            text, written = await self._run_text_build(
+                sprint_contract, loop_num, max_loops, last_eval_feedback,
+            )
+
+            # Write build artifact
+            artifact_dir = self.project_dir / ".productteam" / "sprints" / sprint_name
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            build_artifact = artifact_dir / "build-artifact.md"
+            build_artifact.write_text(text, encoding="utf-8")
+
+            self._setup_project_env()
+
+            # Skip evaluation if disabled
+            if not self.config.pipeline.require_evaluator:
+                console.print("  [dim]Evaluator disabled — auto-passing[/dim]")
+                self.state["stages"][f"build:{sprint_name}"] = {"status": "passed"}
+                _save_state(self.project_dir, self.state)
+                return StageResult(
+                    stage=PipelineStage.BUILD, status="complete",
+                    artifact_path=str(build_artifact),
+                )
+
+            # Evaluate
+            self.state["stages"]["evaluate"] = {
+                "status": "running", "sprint": sprint_name, "loop": loop_num,
+            }
+            _save_state(self.project_dir, self.state)
+
+            eval_response = await self._run_text_evaluate(
+                sprint_contract, sprint_name, loop_num, max_loops,
+            )
+
+            # Write evaluation
+            eval_path = (
+                self.project_dir / ".productteam" / "evaluations"
+                / f"{sprint_name}-eval-{loop_num:03d}.yaml"
+            )
+            eval_path.parent.mkdir(parents=True, exist_ok=True)
+            eval_path.write_text(eval_response, encoding="utf-8")
+
+            # Parse verdict
+            verdict = self._parse_verdict(eval_response)
+            console.print(f"  Verdict: [{'green' if verdict == 'pass' else 'red'}]{verdict}[/]")
+
+            if verdict == "pass":
+                self.state["stages"]["evaluate"] = {
+                    "status": "complete", "sprint": sprint_name, "loop": loop_num,
+                }
+                self.state["stages"][f"build:{sprint_name}"] = {"status": "passed"}
+                _save_state(self.project_dir, self.state)
+                return StageResult(
+                    stage=PipelineStage.BUILD, status="complete",
+                    artifact_path=str(build_artifact),
+                )
+
+            if verdict == "fail":
+                console.print(f"  [red]Sprint {sprint_name} FAILED[/red]")
+                self.state["stages"]["evaluate"]["status"] = "failed"
+                _save_state(self.project_dir, self.state)
+                return StageResult(
+                    stage=PipelineStage.BUILD, status="failed",
+                    error=f"Evaluator returned FAIL on loop {loop_num}",
+                    raw_response=eval_response,
+                )
+
+            # NEEDS_WORK — provide feedback for next loop
+            last_eval_feedback = eval_response[-3000:]
+
+        # Exhausted all loops
+        console.print(f"  [red]Max loops ({max_loops}) exhausted for {sprint_name}[/red]")
+        self.state["stages"]["evaluate"] = {
+            "status": "needs_work", "sprint": sprint_name, "loop": max_loops,
+        }
+        _save_state(self.project_dir, self.state)
+        return StageResult(
+            stage=PipelineStage.BUILD, status="stuck",
+            error=f"Max loops ({max_loops}) exhausted",
+        )
+
     async def _gate(self, gate_name: str, artifact_path: str) -> bool:
         """Request gate approval. Returns True if approved."""
         if self.auto_approve:
@@ -1160,6 +1595,106 @@ class Supervisor:
             if item.suffix in (".yaml", ".yml"):
                 sprints.append(item.stem)
         return sprints
+
+    def _synthesize_sprint_from_plan(self) -> bool:
+        """Synthesize a sprint YAML from plan.md when the planner didn't use write_file.
+
+        Smaller Ollama models often output the sprint plan as markdown text
+        instead of writing YAML files via the write_file tool.  This fallback
+        reads plan.md and creates a minimal but valid sprint-001.yaml that the
+        builder can work from.
+
+        Returns True if a sprint file was created, False otherwise.
+        """
+        import re
+        from datetime import date
+
+        plan_path = self.project_dir / ".productteam" / "plan.md"
+        if not plan_path.exists():
+            return False
+        plan_text = plan_path.read_text(encoding="utf-8")
+        if not plan_text.strip():
+            return False
+
+        # Try to extract YAML blocks first — some models wrap YAML in ```yaml fences
+        yaml_blocks = re.findall(r"```ya?ml\s*\n(.+?)```", plan_text, re.DOTALL)
+        for block in yaml_blocks:
+            try:
+                data = yaml.safe_load(block)
+                if isinstance(data, dict) and "deliverables" in data:
+                    sprint_path = (
+                        self.project_dir / ".productteam" / "sprints" / "sprint-001.yaml"
+                    )
+                    sprint_path.write_text(block, encoding="utf-8")
+                    return True
+            except yaml.YAMLError:
+                continue
+
+        # No valid YAML block found — synthesize from the plan text.
+        # Extract file paths mentioned in the plan (e.g., "src/models.py",
+        # "bmark/main.py", "tests/test_*.py").
+        file_pattern = re.compile(
+            r"(?:^|\s|`)((?:src|lib|app|tests?|bmark|pkg)/[\w/.-]+\.py)"
+            r"|(?:^|\s|`)(\w+\.py)",
+            re.MULTILINE,
+        )
+        seen: set[str] = set()
+        files: list[str] = []
+        for m in file_pattern.finditer(plan_text):
+            path = m.group(1) or m.group(2)
+            if path and path not in seen:
+                seen.add(path)
+                files.append(path)
+
+        if not files:
+            return False
+
+        # Build deliverables from discovered file paths
+        deliverables = []
+        for fpath in files:
+            action = "create"
+            if "test" in fpath.lower():
+                desc = f"Tests for {fpath}"
+                acceptance = [f"All tests in {fpath} pass with pytest"]
+            else:
+                desc = f"Implementation module {fpath}"
+                acceptance = [f"{fpath} exists and is importable without errors"]
+            deliverables.append({
+                "file": fpath,
+                "description": desc,
+                "action": action,
+                "acceptance": acceptance,
+            })
+
+        # Extract title from first heading or first non-empty line
+        title_match = re.search(r"^#+ *(.+)", plan_text, re.MULTILINE)
+        title = title_match.group(1).strip() if title_match else "Sprint 1"
+
+        sprint_data = {
+            "sprint": 1,
+            "title": title,
+            "source": "Synthesized from plan.md (model did not write YAML)",
+            "created": date.today().isoformat(),
+            "scope": "small" if len(deliverables) <= 3 else "medium",
+            "dependencies": [],
+            "deliverables": deliverables,
+            "constraints": [],
+            "notes": (
+                "This sprint contract was auto-synthesized from the planner's "
+                "text output. The original plan is in .productteam/plan.md. "
+                "Refer to it for full context."
+            ),
+        }
+
+        sprint_path = (
+            self.project_dir / ".productteam" / "sprints" / "sprint-001.yaml"
+        )
+        sprint_path.parent.mkdir(parents=True, exist_ok=True)
+        sprint_path.write_text(
+            yaml.dump(sprint_data, default_flow_style=False, sort_keys=False),
+            encoding="utf-8",
+        )
+        return True
 
     def _summarize_eval_feedback(self, eval_response: str, loop_num: int) -> str:
         """Extract actionable findings from an evaluation report.

@@ -1065,6 +1065,81 @@ def test_find_sprints_with_yaml(tmp_path):
     assert result == ["sprint-001", "sprint-002"]
 
 
+def test_synthesize_sprint_from_plan_with_yaml_block(tmp_path):
+    """_synthesize_sprint_from_plan extracts YAML from fenced code blocks."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
+    plan_text = (
+        "# Sprint Plan\n\n"
+        "```yaml\n"
+        "sprint: 1\n"
+        "title: Core CLI\n"
+        "source: PRD\n"
+        "created: 2026-01-01\n"
+        "scope: small\n"
+        "deliverables:\n"
+        "  - file: src/main.py\n"
+        "    description: Main entry point\n"
+        "    action: create\n"
+        "    acceptance:\n"
+        "      - main.py runs without error\n"
+        "```\n"
+    )
+    (tmp_path / ".productteam" / "plan.md").write_text(plan_text)
+    assert supervisor._synthesize_sprint_from_plan() is True
+    sprint_path = tmp_path / ".productteam" / "sprints" / "sprint-001.yaml"
+    assert sprint_path.exists()
+    import yaml
+    data = yaml.safe_load(sprint_path.read_text())
+    assert data["deliverables"][0]["file"] == "src/main.py"
+
+
+def test_synthesize_sprint_from_plan_text_fallback(tmp_path):
+    """_synthesize_sprint_from_plan extracts file paths from markdown text."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
+    plan_text = (
+        "# Bookmark Manager Sprint\n\n"
+        "## Modules to implement\n"
+        "1. `src/models.py` - Pydantic Bookmark model\n"
+        "2. `src/storage.py` - Load/save for JSON\n"
+        "3. `src/cli.py` - Typer app with commands\n"
+        "4. `tests/test_models.py` - Unit tests\n"
+    )
+    (tmp_path / ".productteam" / "plan.md").write_text(plan_text)
+    assert supervisor._synthesize_sprint_from_plan() is True
+    sprint_path = tmp_path / ".productteam" / "sprints" / "sprint-001.yaml"
+    assert sprint_path.exists()
+    import yaml
+    data = yaml.safe_load(sprint_path.read_text())
+    files = [d["file"] for d in data["deliverables"]]
+    assert "src/models.py" in files
+    assert "src/storage.py" in files
+    assert "tests/test_models.py" in files
+    assert data["title"] == "Bookmark Manager Sprint"
+
+
+def test_synthesize_sprint_from_plan_no_plan_file(tmp_path):
+    """_synthesize_sprint_from_plan returns False when no plan.md exists."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
+    assert supervisor._synthesize_sprint_from_plan() is False
+
+
+def test_synthesize_sprint_from_plan_no_files_found(tmp_path):
+    """_synthesize_sprint_from_plan returns False when plan has no file paths."""
+    _init_project(tmp_path)
+    config = _make_config()
+    supervisor = Supervisor(tmp_path, config, _mock_provider())
+    (tmp_path / ".productteam" / "plan.md").write_text(
+        "This plan has no file paths mentioned at all."
+    )
+    assert supervisor._synthesize_sprint_from_plan() is False
+
+
 def test_write_artifact_prd(tmp_path):
     """_write_artifact writes PRD to correct path."""
     _init_project(tmp_path)

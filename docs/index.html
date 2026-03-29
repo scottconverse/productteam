@@ -279,6 +279,7 @@
     .team-grid { grid-template-columns: 1fr; }
     .forge-steps { grid-template-columns: 1fr; }
     .forge-hero { padding: 32px 24px; }
+    .dual-path-grid { grid-template-columns: 1fr !important; }
   }
 </style>
 </head>
@@ -303,10 +304,8 @@
     <p class="tagline">Seven agents. Optional human approval gates. One CLI. The builder never grades its own work — a separate, skeptical evaluator does.</p>
     <p class="sub-tagline">Standalone Python CLI. Supports Anthropic, OpenAI, Ollama, and Gemini.</p>
     <div class="hero-code">
-      <span class="muted">$</span> <span class="cmd">pip install productteam</span>
-    </div>
-    <div class="hero-code" style="margin-top:8px;">
-      <span class="muted">$</span> productteam run <span class="cmd">"I want a CLI tool that estimates API costs"</span>
+      <span class="muted">$</span> <span class="cmd">productteam</span><br>
+      <span class="muted">What are we building?</span> <span class="cmd" style="opacity:0.7;">_</span>
     </div>
     <div class="provider-strip">
       <span class="provider-pill">Anthropic Claude</span>
@@ -316,6 +315,44 @@
       <span class="provider-pill">LM Studio</span>
       <span class="provider-pill">vLLM</span>
     </div>
+  </div>
+</section>
+
+<!-- Two Ways to Run -->
+<section class="section">
+  <div class="container">
+    <p class="section-label">Choose Your Path</p>
+    <h2 class="section-title">Two ways to run</h2>
+    <p class="section-desc">The interactive wizard detects what you have installed and lets you pick.</p>
+    <div class="dual-path-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:28px;">
+        <div style="font-family:var(--font-mono);font-size:13px;color:var(--green);margin-bottom:12px;">A — LOCAL AI</div>
+        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:12px;">Free. Runs on your machine.</div>
+        <div style="font-size:14px;color:var(--text-muted);line-height:1.7;">
+          Powered by <a href="https://ollama.com">Ollama</a>. No API key needed. Recommended model: <code>gpt-oss:20b</code>.<br>
+          ~20-45 minutes per project on consumer hardware.<br>
+          Just install Ollama and go.
+        </div>
+        <div class="install-block" style="margin-top:16px;margin-bottom:0;padding:14px 18px;">
+          <span class="cmd">ollama pull gpt-oss:20b</span><br>
+          <span class="cmd">productteam preflight</span> <span class="comment"># verify model</span>
+        </div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:28px;">
+        <div style="font-family:var(--font-mono);font-size:13px;color:var(--accent);margin-bottom:12px;">B — CLOUD AI</div>
+        <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:12px;">Fast. Bring your API key.</div>
+        <div style="font-size:14px;color:var(--text-muted);line-height:1.7;">
+          Anthropic Claude, OpenAI, or Google Gemini.<br>
+          ~$0.10-0.30 per run. Completes in under a minute.<br>
+          Paste your API key when prompted.
+        </div>
+        <div class="install-block" style="margin-top:16px;margin-bottom:0;padding:14px 18px;">
+          <span class="cmd">productteam</span><br>
+          <span class="comment"># Select Cloud, paste key, done</span>
+        </div>
+      </div>
+    </div>
+    <p style="color:var(--text-muted);font-size:14px;margin-top:20px;text-align:center;max-width:720px;margin-left:auto;margin-right:auto;">Local models are free but slower. A typical project takes 20-45 minutes on a 20B parameter model running on consumer hardware. Cloud APIs complete the same project in under a minute.</p>
   </div>
 </section>
 
@@ -553,18 +590,19 @@
   <div class="container">
     <p class="section-label">60 Seconds</p>
     <h2 class="section-title">Getting started</h2>
-    <p class="section-desc">Install, init, run. Three commands to your first pipeline.</p>
+    <p class="section-desc">Install and run. The wizard handles the rest.</p>
     <div class="install-block">
       <span class="comment"># Install (Python 3.11+)</span><br>
       <span class="cmd">pip install productteam</span><br><br>
-      <span class="comment"># Set up your provider (pick one)</span><br>
-      <span class="cmd">export ANTHROPIC_API_KEY=sk-ant-...</span><br>
-      <span class="comment"># Or: export OPENAI_API_KEY=sk-...</span><br>
-      <span class="comment"># Or: ollama serve  (free, local)</span><br><br>
-      <span class="comment"># Init a project</span><br>
-      <span class="cmd">productteam init</span><br><br>
-      <span class="comment"># Run the full pipeline</span><br>
-      <span class="cmd">productteam run "a CLI tool that estimates LLM API costs"</span>
+      <span class="comment"># Launch the interactive wizard</span><br>
+      <span class="cmd">productteam</span>
+    </div>
+    <div class="install-block" style="margin-top:16px;">
+      <span class="comment"># The wizard asks:</span><br>
+      <span class="muted">What are we building?</span> <span class="cmd">a CLI tool that estimates LLM API costs</span><br><br>
+      <span class="muted">How do you want to run?</span><br>
+      <span class="cmd">&nbsp; [A] Local AI (Ollama) — free, ~20-45 min</span><br>
+      <span class="cmd">&nbsp; [B] Cloud AI — fast (~1 min), requires API key</span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:16px;">
       <div class="install-block" style="margin:0;">
@@ -582,6 +620,7 @@
       <div class="install-block" style="margin:0;">
         <span class="comment"># Diagnostics</span><br>
         <span class="cmd">productteam doctor</span><br>
+        <span class="cmd">productteam preflight</span> <span class="comment"># test Ollama model</span><br>
         <span class="cmd">productteam status</span><br>
         <span class="cmd">productteam test</span>
       </div>
@@ -626,7 +665,7 @@
       &nbsp;&middot;&nbsp;
       Built by Scott Converse
     </p>
-    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.5.12 &middot; Alpha &middot; Supports Anthropic, OpenAI, Ollama, and Gemini adapters</p>
+    <p style="margin-top:8px;font-size:12px;color:#484f58;">ProductTeam v2.6.0 &middot; Alpha &middot; Supports Anthropic, OpenAI, Ollama, and Gemini adapters</p>
   </div>
 </footer>
 

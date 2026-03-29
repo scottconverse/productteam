@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 
 import httpx
 
 from productteam.errors import ProductTeamConfigError
 from productteam.providers.base import LLMProvider
+
+logger = logging.getLogger(__name__)
+
+# Retry config for transient Ollama errors (500s, timeouts)
+_MAX_RETRIES = 3
+_RETRY_BACKOFF_BASE = 2.0  # seconds — doubles each retry
 
 
 class OllamaProvider(LLMProvider):
@@ -25,6 +33,37 @@ class OllamaProvider(LLMProvider):
             or "http://localhost:11434"
         ).rstrip("/")
 
+    async def _post_with_retry(
+        self, client: httpx.AsyncClient, payload: dict
+    ) -> dict:
+        """POST to Ollama /api/chat with retry on transient errors."""
+        last_exc: Exception | None = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                resp = await client.post(
+                    f"{self._host}/api/chat",
+                    json=payload,
+                )
+                resp.raise_for_status()
+                return resp.json()
+            except (httpx.HTTPStatusError, httpx.ReadTimeout) as exc:
+                last_exc = exc
+                is_server_error = (
+                    isinstance(exc, httpx.HTTPStatusError)
+                    and exc.response.status_code >= 500
+                )
+                is_timeout = isinstance(exc, httpx.ReadTimeout)
+                if is_server_error or is_timeout:
+                    wait = _RETRY_BACKOFF_BASE * (2 ** attempt)
+                    logger.warning(
+                        "Ollama transient error (attempt %d/%d): %s — retrying in %.0fs",
+                        attempt + 1, _MAX_RETRIES, exc, wait,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+        raise last_exc  # type: ignore[misc]
+
     async def complete(
         self,
         system: str,
@@ -39,14 +78,16 @@ class OllamaProvider(LLMProvider):
             "options": {"num_predict": max_tokens},
         }
         async with httpx.AsyncClient(timeout=600.0) as client:
-            resp = await client.post(
-                f"{self._host}/api/chat",
-                json=payload,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            data = await self._post_with_retry(client, payload)
+        msg = data["message"]
+        text = msg.get("content", "")
+        # Thinking models (Qwen3, DeepSeek-R1) may put reasoning in a
+        # "thinking" field and leave "content" empty if num_predict is
+        # exhausted by the thinking tokens.  Fall back to thinking text.
+        if not text.strip() and msg.get("thinking"):
+            text = msg["thinking"]
         usage = {"input_tokens": 0, "output_tokens": 0}
-        return data["message"]["content"], usage
+        return text, usage
 
     @staticmethod
     def _convert_messages(messages: list[dict]) -> list[dict]:
@@ -135,18 +176,17 @@ class OllamaProvider(LLMProvider):
             "options": {"num_predict": max_tokens},
         }
         async with httpx.AsyncClient(timeout=600.0) as client:
-            resp = await client.post(
-                f"{self._host}/api/chat",
-                json=payload,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+            data = await self._post_with_retry(client, payload)
 
         msg = data["message"]
         content = []
 
-        if msg.get("content"):
-            content.append({"type": "text", "text": msg["content"]})
+        text = msg.get("content", "")
+        # Thinking models: fall back to thinking text if content is empty
+        if not text.strip() and msg.get("thinking"):
+            text = msg["thinking"]
+        if text:
+            content.append({"type": "text", "text": text})
 
         for tc in msg.get("tool_calls", []):
             import uuid
