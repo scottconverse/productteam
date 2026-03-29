@@ -63,6 +63,7 @@ def version_cmd() -> None:
 def doctor_cmd(
     no_network: bool = typer.Option(False, "--no-network", help="Skip API reachability checks"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    deep: bool = typer.Option(False, "--deep", help="Run full pipeline self-test with ScriptedProvider (no API key needed)"),
     directory: Optional[Path] = typer.Option(
         None, "--dir", "-d", help="Project directory (default: current directory)"
     ),
@@ -98,6 +99,19 @@ def doctor_cmd(
         console.print("\n[bold green]All checks passed. ProductTeam is ready.[/bold green]")
     else:
         console.print("\n[bold red]Some checks failed. Fix the issues above.[/bold red]")
+
+    if deep:
+        import asyncio
+
+        from productteam.selftest import run_self_test
+
+        console.print("\n[bold]Running deep self-test (full pipeline with ScriptedProvider)...[/bold]")
+        passed = asyncio.run(run_self_test())
+        if passed:
+            console.print("[bold green]PASS[/bold green] -- pipeline self-test completed successfully.")
+        else:
+            console.print("[bold red]FAIL[/bold red] -- pipeline self-test did not complete.")
+            exit_code = 1
 
     raise typer.Exit(code=exit_code)
 
@@ -728,6 +742,7 @@ _LIVE_API_KEY_MAP = {
 def test_cmd(
     ctx: typer.Context,
     live: bool = typer.Option(False, "--live", help="Run live integration tests (makes real API calls)"),
+    integration: bool = typer.Option(False, "--integration", help="Run only @pytest.mark.final integration tests"),
     provider: Optional[str] = typer.Option(
         None, "--provider", "-p",
         help="LLM provider for live tests (anthropic|openai|ollama|gemini). Default: from config or anthropic.",
@@ -747,6 +762,7 @@ def test_cmd(
 
     By default runs offline unit tests only. Use --live to run integration
     tests that make real API calls (costs money, requires API key).
+    Use --integration to run only @pytest.mark.final end-to-end tests.
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -762,6 +778,8 @@ def test_cmd(
     if live:
         _live_preflight(target, provider, model)
         pytest_args += ["-m", "live"]
+    elif integration:
+        pytest_args += ["-m", "final"]
     else:
         pytest_args += ["-m", "not live"]
 
@@ -774,8 +792,9 @@ def test_cmd(
 
     pytest_args.append("tests/")
 
+    test_type = "live integration" if live else ("final integration" if integration else "unit")
     console.print(
-        f"[bold]Running {'live integration' if live else 'unit'} tests[/bold]"
+        f"[bold]Running {test_type} tests[/bold]"
         + (f" [dim](provider: {provider or 'config default'})[/dim]" if live else "")
     )
     console.print(f"[dim]{' '.join(pytest_args)}[/dim]\n")

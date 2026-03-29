@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "productteam"
-version = "2.6.1"
+version = "2.6.2"
 description = "Structured AI software delivery pipeline for PRDs, sprint plans, implementation, evaluation, and docs."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -58,4 +58,5 @@ pythonpath = ["src"]
 asyncio_mode = "auto"
 markers = [
     "live: marks tests that make real API calls (deselect with '-m \"not live\"')",
+    "final: end-to-end smoke test — runs last after all other tests pass",
 ]
