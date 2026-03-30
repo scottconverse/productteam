@@ -252,7 +252,7 @@ class CoverPage(Flowable):
         # Title
         c.setFillColor(WHITE)
         c.setFont(FONT_BOLD, 32)
-        c.drawCentredString(w/2, h - 160, "ProductTeam v2.6.2")
+        c.drawCentredString(w/2, h - 160, "ProductTeam v2.6.3")
 
         c.setFillColor(TEXT_MUTED)
         c.setFont(FONT, 16)
