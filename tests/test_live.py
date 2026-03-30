@@ -9,6 +9,7 @@ small prompts to minimize cost. Each test should complete in under 30s.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,16 @@ from productteam.models import ProductTeamConfig
 from productteam.providers.base import LLMProvider
 
 pytestmark = pytest.mark.live
+
+
+def _is_ollama() -> bool:
+    return os.environ.get("PRODUCTTEAM_TEST_PROVIDER", "") == "ollama"
+
+
+# Ollama local models need longer timeouts (20B model on CPU/GPU).
+# Thinker stages (text-only, no tool loop) can take 15-25 min on large models.
+_STAGE_TIMEOUT = 1800 if _is_ollama() else 60
+_BUILDER_TIMEOUT = 1800 if _is_ollama() else 60
 
 
 # ---------------------------------------------------------------------------
@@ -79,8 +90,8 @@ async def test_live_thinker_stage(live_provider: LLMProvider, live_project: Path
         "pipeline": {
             "provider": live_provider.name(),
             "model": live_provider.model_id(),
-            "stage_timeout_seconds": 60,
-            "builder_timeout_seconds": 60,
+            "stage_timeout_seconds": _STAGE_TIMEOUT,
+            "builder_timeout_seconds": _BUILDER_TIMEOUT,
             "builder_max_tool_calls": 5,
         },
     })
@@ -94,7 +105,7 @@ async def test_live_thinker_stage(live_provider: LLMProvider, live_project: Path
 
     assert result.status == "complete"
     assert result.artifact_path
-    artifact = (live_project / result.artifact_path).read_text()
+    artifact = (live_project / result.artifact_path).read_text(encoding="utf-8")
     assert len(artifact) > 50  # non-trivial output
 
 
@@ -120,7 +131,7 @@ async def test_live_tool_loop_reads_file(live_provider: LLMProvider, live_projec
         initial_user_message="Read hello.txt and tell me what it says.",
         project_dir=live_project,
         max_tool_calls=5,
-        timeout_seconds=60,
+        timeout_seconds=_STAGE_TIMEOUT,
     )
 
     assert result.status == "complete"
@@ -142,7 +153,7 @@ async def test_live_tool_loop_writes_file(live_provider: LLMProvider, live_proje
         initial_user_message="Write 'test passed' to output.txt.",
         project_dir=live_project,
         max_tool_calls=5,
-        timeout_seconds=60,
+        timeout_seconds=_STAGE_TIMEOUT,
     )
 
     assert result.status == "complete"
@@ -177,8 +188,8 @@ async def test_live_build_evaluate_loop(live_provider: LLMProvider, live_project
             "provider": live_provider.name(),
             "model": live_provider.model_id(),
             "max_loops": 2,
-            "stage_timeout_seconds": 90,
-            "builder_timeout_seconds": 90,
+            "stage_timeout_seconds": max(90, _STAGE_TIMEOUT),
+            "builder_timeout_seconds": max(90, _BUILDER_TIMEOUT),
             "builder_max_tool_calls": 15,
         },
     })

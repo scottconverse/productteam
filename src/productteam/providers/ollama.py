@@ -13,9 +13,20 @@ from productteam.providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
 
-# Retry config for transient Ollama errors (500s, timeouts)
-_MAX_RETRIES = 3
-_RETRY_BACKOFF_BASE = 2.0  # seconds — doubles each retry
+# Retry config for transient Ollama errors (500s, timeouts, connection resets)
+_MAX_RETRIES = 6
+_RETRY_BACKOFF_BASE = 3.0  # seconds — doubles each retry (3, 6, 12, 24, 48, 96)
+
+# All httpx exceptions we treat as transient (Ollama can drop connections
+# during long inferences, especially on large models)
+_TRANSIENT_EXCEPTIONS = (
+    httpx.HTTPStatusError,
+    httpx.ReadTimeout,
+    httpx.ConnectTimeout,
+    httpx.ConnectError,
+    httpx.RemoteProtocolError,
+    httpx.ReadError,
+)
 
 
 class OllamaProvider(LLMProvider):
@@ -36,7 +47,12 @@ class OllamaProvider(LLMProvider):
     async def _post_with_retry(
         self, client: httpx.AsyncClient, payload: dict
     ) -> dict:
-        """POST to Ollama /api/chat with retry on transient errors."""
+        """POST to Ollama /api/chat with retry on transient errors.
+
+        Local models on consumer hardware can drop connections, time out,
+        or return 500s during long inferences.  We retry aggressively
+        because the cost is zero and the alternative is a failed pipeline.
+        """
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
             try:
@@ -46,22 +62,27 @@ class OllamaProvider(LLMProvider):
                 )
                 resp.raise_for_status()
                 return resp.json()
-            except (httpx.HTTPStatusError, httpx.ReadTimeout) as exc:
+            except _TRANSIENT_EXCEPTIONS as exc:
                 last_exc = exc
-                is_server_error = (
+                # For HTTPStatusError, only retry on 5xx
+                if (
                     isinstance(exc, httpx.HTTPStatusError)
-                    and exc.response.status_code >= 500
+                    and exc.response.status_code < 500
+                ):
+                    raise
+                wait = _RETRY_BACKOFF_BASE * (2 ** attempt)
+                exc_type = type(exc).__name__
+                exc_msg = str(exc) or "(no details)"
+                logger.warning(
+                    "Ollama transient error (attempt %d/%d): %s: %s — retrying in %.0fs",
+                    attempt + 1, _MAX_RETRIES, exc_type, exc_msg, wait,
                 )
-                is_timeout = isinstance(exc, httpx.ReadTimeout)
-                if is_server_error or is_timeout:
-                    wait = _RETRY_BACKOFF_BASE * (2 ** attempt)
-                    logger.warning(
-                        "Ollama transient error (attempt %d/%d): %s — retrying in %.0fs",
-                        attempt + 1, _MAX_RETRIES, exc, wait,
-                    )
-                    await asyncio.sleep(wait)
-                    continue
-                raise
+                print(
+                    f"Ollama transient error (attempt {attempt + 1}/{_MAX_RETRIES}): "
+                    f"{exc_type}: {exc_msg} — retrying in {wait:.0f}s"
+                )
+                await asyncio.sleep(wait)
+                continue
         raise last_exc  # type: ignore[misc]
 
     async def complete(
@@ -77,7 +98,7 @@ class OllamaProvider(LLMProvider):
             "stream": False,
             "options": {"num_predict": max_tokens},
         }
-        async with httpx.AsyncClient(timeout=600.0) as client:
+        async with httpx.AsyncClient(timeout=1800.0) as client:
             data = await self._post_with_retry(client, payload)
         msg = data["message"]
         text = msg.get("content", "")
@@ -175,7 +196,7 @@ class OllamaProvider(LLMProvider):
             "tools": ollama_tools,
             "options": {"num_predict": max_tokens},
         }
-        async with httpx.AsyncClient(timeout=600.0) as client:
+        async with httpx.AsyncClient(timeout=1800.0) as client:
             data = await self._post_with_retry(client, payload)
 
         msg = data["message"]
