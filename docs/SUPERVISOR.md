@@ -1,3 +1,4 @@
+<!-- supervisor-card: generated (safe to overwrite; delete this line if you hand-edit) -->
 # ProductTeam Supervisor Card
 
 One-page operating guide for Scott. Everything on this card is grounded in the
