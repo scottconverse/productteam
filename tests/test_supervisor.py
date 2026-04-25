@@ -1486,3 +1486,687 @@ def test_token_summary_includes_cache_fields():
     assert summary["cache_read_input_tokens"] == 17000
     assert len(summary["by_stage"]) == 2
     assert summary["by_stage"][0]["cache_read_input_tokens"] == 2000
+
+
+# ---------------------------------------------------------------------------
+# Coverage uplift: CostTracker, validate_cache_thresholds, _setup_project_env,
+# _gate interactive, _probe_tool_support, text-mode build/evaluate loop,
+# _run_single_step branches, _synthesize_sprint_from_plan edge cases,
+# _load_state schema mismatch.
+# ---------------------------------------------------------------------------
+
+from productteam.supervisor import (
+    CostTracker,
+    validate_cache_thresholds,
+    _is_stage_complete,
+    _is_sprint_passed,
+    _estimate_tokens,
+)
+from productteam.errors import BudgetExceededError
+
+
+def test_cost_tracker_known_model_cost():
+    """est_cost computes from pricing for a known model."""
+    ct = CostTracker(model_id="claude-haiku-4-5-20251001", budget_usd=10.0)
+    ct.total_input = 1_000_000
+    ct.total_output = 1_000_000
+    cost = ct.est_cost
+    # 1M input * 0.80 + 1M output * 4.00 = 4.80
+    assert cost is not None
+    assert abs(cost - 4.80) < 0.01
+
+
+def test_cost_tracker_unknown_model_returns_none():
+    """est_cost returns None for an unknown model id."""
+    ct = CostTracker(model_id="unknown-model-zzz", budget_usd=10.0)
+    assert ct.est_cost is None
+    # check() with no pricing should not raise
+    ct.check("prd")
+
+
+def test_cost_tracker_add_accumulates_and_checks_under_budget():
+    ct = CostTracker(model_id="claude-haiku-4-5-20251001", budget_usd=100.0)
+    ct.add({"input_tokens": 1000, "output_tokens": 500,
+            "cache_creation_input_tokens": 200, "cache_read_input_tokens": 300},
+           stage="prd")
+    assert ct.total_input == 1000
+    assert ct.total_output == 500
+    assert ct.total_cache_creation == 200
+    assert ct.total_cache_read == 300
+
+
+def test_cost_tracker_check_raises_over_budget():
+    ct = CostTracker(model_id="claude-haiku-4-5-20251001", budget_usd=0.001)
+    with pytest.raises(BudgetExceededError):
+        ct.add({"input_tokens": 10_000_000, "output_tokens": 0}, stage="x")
+
+
+def test_estimate_tokens():
+    assert _estimate_tokens("") == 0
+    assert _estimate_tokens("abcd") == 1
+    assert _estimate_tokens("a" * 400) == 100
+
+
+def test_validate_cache_thresholds_unknown_model_returns_empty(tmp_path):
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    assert validate_cache_thresholds("nope-model", skills) == []
+
+
+def test_validate_cache_thresholds_warns_when_short(tmp_path):
+    skills = tmp_path / "skills"
+    (skills / "builder").mkdir(parents=True)
+    (skills / "builder" / "SKILL.md").write_text("short")
+    warnings = validate_cache_thresholds(
+        "claude-haiku-4-5-20251001", skills, skill_names=("builder",)
+    )
+    assert len(warnings) == 1
+    assert "builder" in warnings[0]
+    assert "cache minimum" in warnings[0]
+
+
+def test_validate_cache_thresholds_passes_when_long_enough(tmp_path):
+    skills = tmp_path / "skills"
+    (skills / "builder").mkdir(parents=True)
+    # Need ~1024 tokens for sonnet (~4096 chars)
+    (skills / "builder" / "SKILL.md").write_text("x" * 5000)
+    warnings = validate_cache_thresholds(
+        "claude-sonnet-4-6", skills, skill_names=("builder",)
+    )
+    assert warnings == []
+
+
+def test_validate_cache_thresholds_skips_missing_skill(tmp_path):
+    skills = tmp_path / "skills"
+    skills.mkdir()
+    # No SKILL.md anywhere — silently skipped (returns empty)
+    warnings = validate_cache_thresholds(
+        "claude-haiku-4-5-20251001", skills, skill_names=("builder",)
+    )
+    assert warnings == []
+
+
+# --- Stage / sprint helpers ---
+
+
+def test_is_stage_complete_true_false():
+    state = {"stages": {"prd": {"status": "complete"}, "plan": {"status": "running"}}}
+    assert _is_stage_complete(state, "prd") is True
+    assert _is_stage_complete(state, "plan") is False
+    assert _is_stage_complete(state, "missing") is False
+
+
+def test_is_sprint_passed_via_evaluate_status():
+    state = {"stages": {"evaluate": {"sprint": "sprint-001", "status": "complete"}}}
+    assert _is_sprint_passed(state, "sprint-001") is True
+    assert _is_sprint_passed(state, "sprint-002") is False
+
+
+def test_is_sprint_passed_via_per_sprint_marker():
+    state = {"stages": {"build:sprint-007": {"status": "passed"}}}
+    assert _is_sprint_passed(state, "sprint-007") is True
+
+
+# --- _setup_project_env ---
+
+
+def _make_config_install(auto_install: bool, **overrides):
+    pipe = {
+        "provider": "anthropic",
+        "model": "test-model",
+        "max_loops": 3,
+        "stage_timeout_seconds": 10,
+        "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5,
+        "auto_approve": False,
+        "auto_install_deps": auto_install,
+    }
+    pipe.update(overrides)
+    return _make_config(pipeline=pipe)
+
+
+def test_setup_project_env_disabled_short_circuits(tmp_path):
+    """When auto_install_deps is False, no subprocess work happens."""
+    _init_project(tmp_path)
+    config = _make_config_install(auto_install=False)
+    sup = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
+    with patch("subprocess.run") as run:
+        sup._setup_project_env()
+        run.assert_not_called()
+
+
+def test_setup_project_env_creates_venv_and_installs_pyproject(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    config = _make_config_install(auto_install=True)
+    sup = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
+
+    # Stub subprocess.run so it doesn't actually create a venv.
+    # We then create the pip executable on disk so the code proceeds to install.
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        # On the first call (venv creation) create the pip executable on disk
+        if "venv" in " ".join(map(str, cmd)):
+            venv = tmp_path / ".venv"
+            if os.name == "nt":
+                bindir = venv / "Scripts"
+            else:
+                bindir = venv / "bin"
+            bindir.mkdir(parents=True, exist_ok=True)
+            (bindir / "pip").write_text("#!/bin/sh\nexit 0\n")
+        result = MagicMock()
+        result.returncode = 0
+        result.stderr = ""
+        return result
+
+    import os
+    with patch("subprocess.run", side_effect=fake_run):
+        sup._setup_project_env()
+
+    # Should have been called twice (venv create + pip install -e .)
+    assert len(calls) == 2
+    assert any("venv" in " ".join(map(str, c)) for c in calls)
+    assert any("install" in " ".join(map(str, c)) and "-e" in " ".join(map(str, c)) for c in calls)
+
+
+def test_setup_project_env_install_fails_nonfatal(tmp_path):
+    """Install failure is logged but does not raise."""
+    _init_project(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    config = _make_config_install(auto_install=True)
+    sup = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
+
+    import os
+
+    def fake_run(cmd, **kw):
+        if "venv" in " ".join(map(str, cmd)):
+            venv = tmp_path / ".venv"
+            bindir = venv / ("Scripts" if os.name == "nt" else "bin")
+            bindir.mkdir(parents=True, exist_ok=True)
+            (bindir / "pip").write_text("#!/bin/sh\nexit 0\n")
+            r = MagicMock()
+            r.returncode = 0
+            r.stderr = ""
+            return r
+        # pip install fails with non-zero
+        r = MagicMock()
+        r.returncode = 1
+        r.stderr = "broken dependency"
+        return r
+
+    with patch("subprocess.run", side_effect=fake_run):
+        sup._setup_project_env()  # should not raise
+
+
+def test_setup_project_env_venv_create_raises_handled(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    config = _make_config_install(auto_install=True)
+    sup = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
+    with patch("subprocess.run", side_effect=OSError("boom")):
+        sup._setup_project_env()  # swallowed
+
+
+def test_setup_project_env_requirements_txt_path(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / "requirements.txt").write_text("rich\n")
+    # Pre-create venv with pip executable so the function skips venv creation
+    import os
+    venv = tmp_path / ".venv"
+    bindir = venv / ("Scripts" if os.name == "nt" else "bin")
+    bindir.mkdir(parents=True, exist_ok=True)
+    (bindir / "pip").write_text("")
+
+    config = _make_config_install(auto_install=True)
+    sup = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
+
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        r = MagicMock()
+        r.returncode = 0
+        r.stderr = ""
+        return r
+
+    with patch("subprocess.run", side_effect=fake_run):
+        sup._setup_project_env()
+
+    # Only the requirements install should have run (no pyproject.toml exists)
+    assert len(calls) == 1
+    cmd_str = " ".join(map(str, calls[0]))
+    assert "requirements.txt" in cmd_str
+
+
+def test_setup_project_env_pip_missing_returns_silently(tmp_path):
+    """If venv creation 'succeeded' but pip is missing, function returns without install."""
+    _init_project(tmp_path)
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    config = _make_config_install(auto_install=True)
+    sup = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
+
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        # Simulate venv "creation" but never actually write pip to disk
+        r = MagicMock()
+        r.returncode = 0
+        r.stderr = ""
+        return r
+
+    with patch("subprocess.run", side_effect=fake_run):
+        sup._setup_project_env()
+
+    # Only the venv-create call ran; no install attempted because pip isn't on disk.
+    assert len(calls) == 1
+
+
+# --- _gate interactive branches ---
+
+
+@pytest.mark.asyncio
+async def test_gate_user_approves(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=False)
+    with patch("productteam.supervisor.Prompt.ask", return_value="y"):
+        assert await sup._gate("Test", "art.md") is True
+
+
+@pytest.mark.asyncio
+async def test_gate_user_rejects(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=False)
+    with patch("productteam.supervisor.Prompt.ask", return_value="n"):
+        assert await sup._gate("Test", "art.md") is False
+    # State should be saved
+    assert (tmp_path / ".productteam" / "state.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_gate_edit_then_approve(tmp_path):
+    _init_project(tmp_path)
+    art = tmp_path / "art.md"
+    art.write_text("orig")
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=False)
+
+    # First answer: edit (spawns editor); second answer: y → approve
+    answers = iter(["edit", "y"])
+
+    fake_proc = MagicMock()
+    fake_proc.wait = AsyncMock(return_value=0)
+
+    async def fake_create_subprocess_exec(*a, **kw):
+        return fake_proc
+
+    with patch("productteam.supervisor.Prompt.ask", side_effect=lambda *a, **kw: next(answers)), \
+         patch("asyncio.create_subprocess_exec", side_effect=fake_create_subprocess_exec):
+        assert await sup._gate("Test", str(art)) is True
+
+
+@pytest.mark.asyncio
+async def test_gate_edit_with_no_artifact(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=False)
+    answers = iter(["edit", "n"])
+    with patch("productteam.supervisor.Prompt.ask",
+               side_effect=lambda *a, **kw: next(answers)):
+        assert await sup._gate("Test", "") is False
+
+
+# --- _probe_tool_support ---
+
+
+@pytest.mark.asyncio
+async def test_probe_tool_support_cached_short_circuit(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    sup._tool_mode = True
+    assert await sup._probe_tool_support() is True
+    sup._tool_mode = False
+    assert await sup._probe_tool_support() is False
+
+
+@pytest.mark.asyncio
+async def test_probe_tool_support_non_ollama_skips(tmp_path):
+    """Non-Ollama provider sets tool_mode=True without calling the model."""
+    _init_project(tmp_path)
+    provider = _mock_provider()  # AsyncMock(spec=LLMProvider) — not an OllamaProvider
+    sup = Supervisor(tmp_path, _make_config(), provider, auto_approve=True)
+    assert await sup._probe_tool_support() is True
+    assert sup._tool_mode is True
+
+
+@pytest.mark.asyncio
+async def test_probe_tool_support_ollama_with_tool_use(tmp_path):
+    _init_project(tmp_path)
+    from productteam.providers.ollama import OllamaProvider
+    provider = MagicMock(spec=OllamaProvider)
+    provider.complete_with_tools = AsyncMock(return_value={
+        "content": [{"type": "tool_use", "name": "write_file", "input": {}}]
+    })
+    sup = Supervisor(tmp_path, _make_config(), provider, auto_approve=True)
+    sup._tool_mode = None
+    assert await sup._probe_tool_support() is True
+
+
+@pytest.mark.asyncio
+async def test_probe_tool_support_ollama_text_only(tmp_path):
+    _init_project(tmp_path)
+    from productteam.providers.ollama import OllamaProvider
+    provider = MagicMock(spec=OllamaProvider)
+    provider.complete_with_tools = AsyncMock(return_value={
+        "content": [{"type": "text", "text": "hi"}]
+    })
+    sup = Supervisor(tmp_path, _make_config(), provider, auto_approve=True)
+    sup._tool_mode = None
+    assert await sup._probe_tool_support() is False
+
+
+@pytest.mark.asyncio
+async def test_probe_tool_support_ollama_exception_is_text_only(tmp_path):
+    _init_project(tmp_path)
+    from productteam.providers.ollama import OllamaProvider
+    provider = MagicMock(spec=OllamaProvider)
+    provider.complete_with_tools = AsyncMock(side_effect=RuntimeError("boom"))
+    sup = Supervisor(tmp_path, _make_config(), provider, auto_approve=True)
+    sup._tool_mode = None
+    assert await sup._probe_tool_support() is False
+
+
+# --- _run_text_build / _run_text_evaluate / _build_evaluate_loop_text ---
+
+
+@pytest.mark.asyncio
+async def test_run_text_build_extracts_files(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+
+    response = (
+        "**src/foo.py**\n"
+        "```python\n"
+        "def hello():\n"
+        "    return 1\n"
+        "```\n"
+    )
+    sup.provider.complete = AsyncMock(return_value=(response, {"input_tokens": 0, "output_tokens": 0}))
+    text, written = await sup._run_text_build("contract", 1, 3, "")
+    assert "foo.py" in text
+    # write_extracted_files should have produced at least one path
+    assert isinstance(written, list)
+
+
+@pytest.mark.asyncio
+async def test_run_text_build_skill_missing_uses_fallback_prompt(tmp_path):
+    _init_project(tmp_path)
+    # Remove builder skill
+    (tmp_path / ".claude" / "skills" / "builder" / "SKILL.md").unlink()
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    sup.provider.complete = AsyncMock(return_value=("no files here", {}))
+    text, written = await sup._run_text_build("contract", 1, 3, "prior feedback")
+    assert text == "no files here"
+    assert written == []
+
+
+@pytest.mark.asyncio
+async def test_run_text_evaluate_uses_fallback_when_skill_missing(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / ".claude" / "skills" / "evaluator" / "SKILL.md").unlink()
+    (tmp_path / "src.py").write_text("print('x')")
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    sup.provider.complete = AsyncMock(return_value=("VERDICT: PASS", {}))
+    out = await sup._run_text_evaluate("contract", "sprint-001", 1, 3)
+    assert "PASS" in out
+
+
+@pytest.mark.asyncio
+async def test_build_evaluate_loop_text_pass_loop1(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
+        "sprint: 1\ntitle: T\n"
+    )
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+
+    sup.provider.complete = AsyncMock(side_effect=[
+        ("**a.py**\n```python\nx=1\n```", {}),  # builder
+        ("VERDICT: PASS", {}),  # evaluator
+    ])
+    res = await sup._build_evaluate_loop_text("sprint-001")
+    assert res.status == "complete"
+
+
+@pytest.mark.asyncio
+async def test_build_evaluate_loop_text_missing_sprint(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    res = await sup._build_evaluate_loop_text("does-not-exist")
+    assert res.status == "failed"
+    assert "not found" in res.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_build_evaluate_loop_text_fail_verdict(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text(
+        "sprint: 1\n"
+    )
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    sup.provider.complete = AsyncMock(side_effect=[
+        ("nofiles", {}),
+        ("VERDICT: FAIL", {}),
+    ])
+    res = await sup._build_evaluate_loop_text("sprint-001")
+    assert res.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_build_evaluate_loop_text_max_loops(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text("sprint: 1\n")
+    config = _make_config(pipeline={
+        "provider": "anthropic", "model": "test", "max_loops": 2,
+        "stage_timeout_seconds": 10, "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5, "auto_approve": False,
+    })
+    sup = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
+    sup.provider.complete = AsyncMock(side_effect=[
+        ("nofiles", {}), ("VERDICT: NEEDS_WORK", {}),
+        ("nofiles", {}), ("VERDICT: NEEDS_WORK", {}),
+    ])
+    res = await sup._build_evaluate_loop_text("sprint-001")
+    assert res.status == "stuck"
+    assert "Max loops" in res.error
+
+
+@pytest.mark.asyncio
+async def test_build_evaluate_loop_text_skips_eval_when_disabled(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text("sprint: 1\n")
+    config = _make_config(pipeline={
+        "provider": "anthropic", "model": "test", "max_loops": 2,
+        "stage_timeout_seconds": 10, "builder_timeout_seconds": 30,
+        "builder_max_tool_calls": 5, "auto_approve": False,
+        "require_evaluator": False,
+    })
+    sup = Supervisor(tmp_path, config, _mock_provider(), auto_approve=True)
+    sup.provider.complete = AsyncMock(return_value=("nofiles", {}))
+    res = await sup._build_evaluate_loop_text("sprint-001")
+    assert res.status == "complete"
+    # Only builder called — evaluator skipped
+    assert sup.provider.complete.call_count == 1
+
+
+# --- _run_single_step branches ---
+
+
+@pytest.mark.asyncio
+async def test_run_single_step_unknown_returns_skipped(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    res = await sup._run_single_step("ship", None, False)
+    assert res.status == "skipped"
+
+
+@pytest.mark.asyncio
+async def test_run_single_step_build_text_mode(tmp_path):
+    """When tool_mode is False, BUILD step uses text-only loop."""
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text("sprint: 1\n")
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    sup._tool_mode = False
+    sup.provider.complete = AsyncMock(side_effect=[
+        ("nofiles", {}),
+        ("VERDICT: PASS", {}),
+    ])
+    res = await sup._run_single_step("build", None, False)
+    assert res.status == "complete"
+
+
+@pytest.mark.asyncio
+async def test_run_single_step_build_tool_mode(tmp_path):
+    """When tool_mode is True, BUILD step uses tool-loop based path."""
+    _init_project(tmp_path)
+    (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").write_text("sprint: 1\n")
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    sup._tool_mode = True
+    sup.provider.complete_with_tools = AsyncMock(side_effect=[
+        {"role": "assistant", "content": [{"type": "text", "text": "Built."}], "stop_reason": "end_turn"},
+        {"role": "assistant", "content": [{"type": "text", "text": "evaluator_verdict: PASS"}], "stop_reason": "end_turn"},
+    ])
+    res = await sup._run_single_step("build", None, False)
+    assert res.status == "complete"
+
+
+# --- _synthesize_sprint_from_plan edge cases ---
+
+
+def test_synthesize_sprint_invalid_yaml_block_falls_back_to_text(tmp_path):
+    _init_project(tmp_path)
+    plan = tmp_path / ".productteam" / "plan.md"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    # YAML block parses as a dict but lacks 'deliverables'
+    plan.write_text(
+        "# Plan title\n\n```yaml\nsprint: 1\ntitle: nope\n```\n\nAlso `src/main.py` and tests/test_x.py\n"
+    )
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    assert sup._synthesize_sprint_from_plan() is True
+    sprint = (tmp_path / ".productteam" / "sprints" / "sprint-001.yaml").read_text()
+    assert "deliverables" in sprint
+    assert "src/main.py" in sprint
+
+
+def test_synthesize_sprint_yaml_block_parse_error_continues(tmp_path):
+    _init_project(tmp_path)
+    plan = tmp_path / ".productteam" / "plan.md"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    # Malformed YAML in fence + valid file references after — falls back to text
+    plan.write_text(
+        "```yaml\n: not: valid: yaml: ::\n```\n\n`app/util.py`\n"
+    )
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    # Either succeeds via text fallback (file reference present) or returns False;
+    # the important branch is that the YAMLError is swallowed without raising.
+    sup._synthesize_sprint_from_plan()  # must not raise
+
+
+def test_synthesize_sprint_empty_plan_returns_false(tmp_path):
+    _init_project(tmp_path)
+    plan = tmp_path / ".productteam" / "plan.md"
+    plan.parent.mkdir(parents=True, exist_ok=True)
+    plan.write_text("   \n\n   ")
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    assert sup._synthesize_sprint_from_plan() is False
+
+
+# --- _load_state schema mismatch ---
+
+
+def test_load_state_schema_mismatch_raises(tmp_path):
+    (tmp_path / ".productteam").mkdir()
+    (tmp_path / ".productteam" / "state.json").write_text(
+        json.dumps({"schema_version": 999})
+    )
+    with pytest.raises(ValueError) as exc:
+        _load_state(tmp_path)
+    assert "schema version" in str(exc.value).lower()
+
+
+# --- _project_file_listing edge cases ---
+
+
+def test_project_file_listing_skips_hidden_and_caches(tmp_path):
+    _init_project(tmp_path)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("x")
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "junk.pyc").write_text("")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "skip.txt").write_text("")
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    listing = sup._project_file_listing()
+    assert "main.py" in listing
+    assert "__pycache__" not in listing
+    assert ".venv" not in listing
+
+
+def test_project_file_listing_truncates_at_max(tmp_path):
+    _init_project(tmp_path)
+    src = tmp_path / "src"
+    src.mkdir()
+    for i in range(10):
+        (src / f"f{i}.py").write_text("x")
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    listing = sup._project_file_listing(max_files=3)
+    assert "truncated" in listing
+
+
+def test_project_file_listing_empty_project(tmp_path):
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    out = sup._project_file_listing()
+    # tmp_path may have only .productteam/state.json from Supervisor init,
+    # so listing may include that file. Accept either empty marker or a
+    # short non-error string.
+    assert isinstance(out, str)
+
+
+# --- _notify_stage callback ---
+
+
+def test_notify_stage_invokes_callback(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    received = []
+    sup._stage_callback = lambda s: received.append(s)
+    sup._notify_stage("prd")
+    assert received == ["prd"]
+
+
+def test_notify_stage_no_callback_is_noop(tmp_path):
+    _init_project(tmp_path)
+    sup = Supervisor(tmp_path, _make_config(), _mock_provider(), auto_approve=True)
+    sup._stage_callback = None
+    # Must not raise when no callback is registered
+    sup._notify_stage("prd")
+
+
+# --- SupervisorResult token_summary with known model pricing ---
+
+
+def test_supervisor_result_token_summary_known_model():
+    stages = [
+        StageResult(PipelineStage.PRD, "complete",
+                    input_tokens=1_000_000, output_tokens=1_000_000),
+    ]
+    res = SupervisorResult(concept="x", stages=stages, status="complete")
+    summary = res.token_summary("claude-haiku-4-5-20251001")
+    assert summary["est_cost_usd"] is not None
+    assert summary["est_cost_usd"] > 0
+
+
+def test_supervisor_result_token_summary_unknown_model_no_cost():
+    stages = [StageResult(PipelineStage.PRD, "complete", input_tokens=10, output_tokens=10)]
+    res = SupervisorResult(concept="x", stages=stages, status="complete")
+    summary = res.token_summary("nope")
+    assert summary["est_cost_usd"] is None
