@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased] - 2026-05-20
+
+### Changed
+- README: rationalized Python support claim. Added the canonical sentence
+  `Requires Python 3.11 or 3.12.` near the badges so the support claim no
+  longer depends on the PyPI pyversions badge (which renders from
+  classifiers and can drift silently).
+- `pyproject.toml`: added `Programming Language :: Python :: 3.13`
+  classifier so the metadata-declared support set matches the CI matrix
+  (which has tested 3.11/3.12/3.13 since well before this audit).
+
+### Documentation
+- Acknowledged CHANGELOG gap between 2.5.12 and the currently-declared
+  package version 2.6.3. The intervening releases (2.5.13 → 2.6.3) shipped
+  without changelog entries; rather than reconstruct individual commits
+  after the fact, the gap is documented here so future readers know not
+  to look for the missing entries.
+
 ## [2.5.12] - 2026-03-27
 
 ### Fixed

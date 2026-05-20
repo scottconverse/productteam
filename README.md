@@ -17,6 +17,8 @@ Supports **Anthropic Claude**, **OpenAI**, **Ollama** (free, local), and **Googl
 ![Python](https://img.shields.io/pypi/pyversions/productteam)
 ![License](https://img.shields.io/pypi/l/productteam)
 
+**Requirements.** Requires Python 3.11 or 3.12. CI also exercises 3.13 (see `Programming Language :: Python :: 3.13` in `pyproject.toml` classifiers).
+
 ---
 
 ## Which one do I want? AgentSuite or productteam?
