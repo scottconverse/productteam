@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - 2026-05-20
+## [Unreleased] - 2026-05-19
 
 ### Changed
 - README: rationalized Python support claim. Added the canonical sentence

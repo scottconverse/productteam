@@ -61,3 +61,12 @@ markers = [
     "live: marks tests that make real API calls (deselect with '-m \"not live\"')",
     "final: end-to-end smoke test — runs last after all other tests pass",
 ]
+
+[tool.ruff]
+# Lock ruff's auto-detection floor to the lowest supported Python (matches
+# `requires-python = ">=3.11"` above). Without this explicit target, the
+# 3.13 classifier addition would let 3.13-only syntax (PEP 695 generics,
+# PEP 701 f-string nesting) silently sneak past lint — ruff would still
+# accept it, but the package would then break on a real 3.11 install.
+# Set the floor to the lowest version we promise to support.
+target-version = "py311"
